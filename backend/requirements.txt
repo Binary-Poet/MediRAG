@@ -1,0 +1,14 @@
+# 阶段 0：最小可运行依赖（后续阶段按需追加）
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+pydantic-settings>=2.4,<3
+numpy>=1.26
+
+# 阶段 2：三路混合检索（图谱 + 稀疏 BM25 + 稠密）
+neo4j>=5.20,<6
+rank-bm25>=0.2.2,<1
+jieba>=0.42.1,<1
+
+# 测试
+pytest>=8.0
+httpx>=0.27
