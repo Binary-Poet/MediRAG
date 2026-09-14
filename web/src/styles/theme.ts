@@ -16,8 +16,11 @@ export const theme = {
   borderRadius: '10px',
   textColorPrimary: '#1f2937',
   textColorSecondary: '#6b7280',
+  textColorBody: '#374151',
+  textColorMuted: '#9ca3af',
   borderColor: '#e5e7eb',
   hoverBg: '#f0fdf4',
+  autoSectionBg: '#fafbfa', // 溯源弹窗区块底
   // 图谱节点语义色
   nodeFormula: '#2d6a4f', // 方剂
   nodeHerb: '#52b788', // 中药
@@ -28,6 +31,9 @@ export const theme = {
   // 安全提示
   safetyBg: '#dcfce7',
   safetyText: '#166534',
+  // 空态/警告徽章
+  warningBg: '#fef3c7',
+  warningText: '#92400e',
 } as const
 
 export type Theme = typeof theme

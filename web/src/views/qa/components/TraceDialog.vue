@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // 检索溯源弹窗 —— 规格 P0-4。阶段 2：响应一次返回后渲染全部步骤；阶段 3 换 SSE 逐步点亮。
-import { computed } from 'vue'
+import { theme } from '../../../styles/theme'
 import type { Trace } from '../../../types/chat'
 
-const props = defineProps<{
+defineProps<{
   visible: boolean
   trace: Trace | null
 }>()
@@ -19,7 +19,7 @@ const steps = [
 ]
 
 // 阶段 2 数据完整返回：全部步骤视为已完成（阶段 3 按 event 推进）
-const doneKeys = computed(() => [1, 2, 3, 4, 5])
+const doneKeys = [1, 2, 3, 4, 5]
 </script>
 
 <template>
@@ -91,7 +91,7 @@ const doneKeys = computed(() => [1, 2, 3, 4, 5])
         <div class="section-title">④ 相关性精排</div>
         <div class="final-line">
           <span class="evidence-n">{{ trace.rerank.evidence_n }} 条证据进入回答上下文</span>
-          <span class="badge" :class="trace.rerank.evidence_n ? 'ok' : 'empty'">
+          <span class="badge" :class="trace.rerank.status === '知识库未匹配' ? 'empty' : 'ok'">
             {{ trace.rerank.status }}
           </span>
         </div>
@@ -119,8 +119,8 @@ const doneKeys = computed(() => [1, 2, 3, 4, 5])
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: #e5e7eb;
-  color: #6b7280;
+  background: v-bind(theme.borderColor);
+  color: v-bind(theme.textColorSecondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -129,24 +129,24 @@ const doneKeys = computed(() => [1, 2, 3, 4, 5])
   font-weight: 600;
 }
 .step.done .step-dot {
-  background: #2d6a4f;
-  color: #fff;
+  background: v-bind(theme.colorPrimary);
+  color: v-bind(theme.cardBg);
 }
 .step-label {
   font-size: 12px;
-  color: #1f2937;
+  color: v-bind(theme.textColorPrimary);
 }
 .section {
-  border: 1px solid #e5e7eb;
+  border: 1px solid v-bind(theme.borderColor);
   border-radius: 8px;
   padding: 12px 14px;
   margin-bottom: 12px;
-  background: #fafbfa;
+  background: v-bind(theme.autoSectionBg);
 }
 .section-title {
   font-size: 13px;
   font-weight: 600;
-  color: #1f2937;
+  color: v-bind(theme.textColorPrimary);
   margin-bottom: 8px;
 }
 .pair {
@@ -155,24 +155,24 @@ const doneKeys = computed(() => [1, 2, 3, 4, 5])
   gap: 10px;
 }
 .pair-item {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: v-bind(theme.cardBg);
+  border: 1px solid v-bind(theme.borderColor);
   border-radius: 6px;
   padding: 8px 10px;
 }
 .pair-label {
   font-size: 12px;
-  color: #6b7280;
+  color: v-bind(theme.textColorSecondary);
   margin-bottom: 4px;
 }
 .pair-text {
   font-size: 13px;
-  color: #1f2937;
+  color: v-bind(theme.textColorPrimary);
 }
 .entity-line {
   margin-top: 8px;
   font-size: 13px;
-  color: #374151;
+  color: v-bind(theme.textColorBody);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -182,7 +182,7 @@ const doneKeys = computed(() => [1, 2, 3, 4, 5])
   margin-right: 0;
 }
 .muted {
-  color: #9ca3af;
+  color: v-bind(theme.textColorMuted);
 }
 .num-cards {
   display: grid;
@@ -190,8 +190,8 @@ const doneKeys = computed(() => [1, 2, 3, 4, 5])
   gap: 10px;
 }
 .num-card {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: v-bind(theme.cardBg);
+  border: 1px solid v-bind(theme.borderColor);
   border-radius: 8px;
   text-align: center;
   padding: 12px 4px;
@@ -199,12 +199,12 @@ const doneKeys = computed(() => [1, 2, 3, 4, 5])
 .num {
   font-size: 22px;
   font-weight: 600;
-  color: #2d6a4f;
+  color: v-bind(theme.colorPrimary);
   line-height: 1.2;
 }
 .num-label {
   font-size: 12px;
-  color: #6b7280;
+  color: v-bind(theme.textColorSecondary);
   margin-top: 4px;
   line-height: 1.4;
 }
@@ -216,7 +216,7 @@ const doneKeys = computed(() => [1, 2, 3, 4, 5])
 }
 .evidence-n {
   font-size: 13px;
-  color: #1f2937;
+  color: v-bind(theme.textColorPrimary);
 }
 .badge {
   font-size: 12px;
@@ -224,11 +224,11 @@ const doneKeys = computed(() => [1, 2, 3, 4, 5])
   padding: 3px 12px;
 }
 .badge.ok {
-  background: #dcfce7;
-  color: #166534;
+  background: v-bind(theme.safetyBg);
+  color: v-bind(theme.safetyText);
 }
 .badge.empty {
-  background: #fef3c7;
-  color: #92400e;
+  background: v-bind(theme.warningBg);
+  color: v-bind(theme.warningText);
 }
 </style>
