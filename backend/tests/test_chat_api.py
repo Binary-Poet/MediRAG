@@ -114,6 +114,30 @@ def test_ask_empty_evidence_returns_fallback(client, monkeypatch, tmp_path) -> N
     assert body["trace"]["rerank"]["status"] == "知识库未匹配"
 
 
+def test_ask_low_rerank_score_triggers_fallback(client, monkeypatch, tmp_path) -> None:
+    empty_graph = MagicMock()
+    empty_graph.all_entities.return_value = []
+    empty_graph.neighbors.return_value = []
+    idx = KeywordIndex()
+    idx.build([SAMPLE_CHUNK])
+    monkeypatch.setattr(chat_module, "get_store",
+                        lambda: _fake_store(tmp_path))
+    monkeypatch.setattr(chat_module, "get_keyword_index", lambda: idx)
+    monkeypatch.setattr(chat_module, "get_graph", lambda: empty_graph)
+    monkeypatch.setattr(chat_module, "embed_texts", lambda texts: [[1.0, 0.0]])
+    monkeypatch.setattr(chat_module, "rerank",
+                        lambda query, docs, top_n: [{"index": 0, "score": 0.12}])
+
+    resp = client.post("/api/chat/ask", json={"question": "今天天气怎么样"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "未检索到可靠依据" in body["answer"]
+    assert body["trace"]["rerank"]["evidence_n"] == 1
+    assert body["trace"]["rerank"]["confidence"] == 0.12
+    assert body["trace"]["rerank"]["status"] == "知识库未匹配"
+
+
 def test_ask_rejects_empty_question(client) -> None:
     resp = client.post("/api/chat/ask", json={"question": ""})
     assert resp.status_code == 422

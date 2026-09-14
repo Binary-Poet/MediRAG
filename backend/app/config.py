@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     final_evidence: int = 5     # 最终证据数
     rrf_k: int = 60             # 融合平衡系数
     rerank_top_n: int = 5       # 精排取前 N（与 final_evidence 联动）
+    evidence_min_score: float = 0.3   # rerank 相关性阈值：top 分低于此且无图谱事实 → 拒答兜底
 
     # ===== Neo4j / MySQL（docker compose 启动）=====
     neo4j_uri: str = "bolt://localhost:7687"

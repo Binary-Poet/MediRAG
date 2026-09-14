@@ -78,7 +78,7 @@ class AskResponse(BaseModel):
     trace: Trace
 
 
-def _fallback_response(question: str) -> AskResponse:
+def _fallback_response(question: str, evidence_n: int = 0, confidence: float = 0.0) -> AskResponse:
     return AskResponse(
         answer="知识库中未检索到可靠依据。请换个问题或稍后再试。",
         references=[],
@@ -87,7 +87,7 @@ def _fallback_response(question: str) -> AskResponse:
             understand=TraceUnderstand(raw=question, rewritten=question, entities=[]),
             retrieve=TraceRetrieve(vector_n=0, keyword_n=0, graph_n=0, entity_n=0),
             fuse=TraceFuse(candidate_n=0),
-            rerank=TraceRerank(evidence_n=0, confidence=0.0, status="知识库未匹配"),
+            rerank=TraceRerank(evidence_n=evidence_n, confidence=confidence, status="知识库未匹配"),
         ),
     )
 
@@ -125,9 +125,14 @@ def ask(body: AskBody) -> AskResponse:
         {**fused[r["index"]], "score": r["score"]} for r in ranked
     ]
 
-    # 5. 置信度兜底（双重条件：文献证据与图谱事实都没有才拒答）
-    if not evidence and not graph_facts:
-        return _fallback_response(question)
+    # 5. 置信度兜底（方案 4.4：证据数=0 或 rerank top 分数低于阈值 → 拒答，图谱事实为强证据独立支撑）
+    low_confidence = bool(evidence) and evidence[0]["score"] < s.evidence_min_score
+    if (not evidence or low_confidence) and not graph_facts:
+        return _fallback_response(
+            question,
+            evidence_n=len(evidence),
+            confidence=evidence[0]["score"] if evidence else 0.0,
+        )
 
     # 6. 组装 Prompt：图谱事实 + 文献证据
     graph_block = "\n".join(
