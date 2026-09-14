@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     milvus_uri: str = "../data/milvus/medirag.db"
     milvus_collection: str = "tcm_chunks"
 
+    # ===== 混合检索（阶段 2；阶段 5 改为用户级推理配置存储）=====
+    semantic_k: int = 20        # 语义召回数
+    keyword_k: int = 20         # 关键词召回数
+    fuse_candidate: int = 25    # 融合候选数
+    final_evidence: int = 5     # 最终证据数
+    rrf_k: int = 60             # 融合平衡系数
+    rerank_top_n: int = 5       # 精排取前 N（与 final_evidence 联动）
+
     # ===== Neo4j / MySQL（docker compose 启动）=====
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
