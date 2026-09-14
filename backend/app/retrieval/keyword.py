@@ -15,10 +15,13 @@ class KeywordIndex:
         self._chunks: list[dict] = []
 
     def build(self, chunks: list[dict]) -> int:
-        """全量重建索引，返回切片数。"""
+        """全量重建索引，返回切片数。空语料不构造 BM25Okapi（其内部会对 0 语料除法崩溃）。"""
         self._chunks = list(chunks)
-        corpus = [jieba.lcut(f"{c['title']}：{c['text']}") for c in self._chunks]
-        self._bm25 = BM25Okapi(corpus)
+        if self._chunks:
+            corpus = [jieba.lcut(f"{c['title']}：{c['text']}") for c in self._chunks]
+            self._bm25 = BM25Okapi(corpus)
+        else:
+            self._bm25 = None
         return len(self._chunks)
 
     def search(self, query: str, top_k: int = 20) -> list[dict]:

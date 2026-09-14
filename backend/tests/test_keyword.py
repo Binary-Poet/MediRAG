@@ -30,3 +30,9 @@ def test_search_zero_score_filtered():
 
 def test_search_unbuilt_returns_empty():
     assert KeywordIndex().search("人参") == []
+
+
+def test_build_empty_then_search_returns_empty():
+    idx = KeywordIndex()
+    assert idx.build([]) == 0
+    assert idx.search("人参") == []
