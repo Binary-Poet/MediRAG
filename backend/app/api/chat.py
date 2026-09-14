@@ -78,15 +78,25 @@ class AskResponse(BaseModel):
     trace: Trace
 
 
-def _fallback_response(question: str, evidence_n: int = 0, confidence: float = 0.0) -> AskResponse:
+def _fallback_response(
+    question: str, *,
+    entities: list[str] | None = None,
+    vector_n: int = 0,
+    keyword_n: int = 0,
+    graph_n: int = 0,
+    entity_n: int = 0,
+    candidate_n: int = 0,
+    evidence_n: int = 0,
+    confidence: float = 0.0,
+) -> AskResponse:
     return AskResponse(
         answer="知识库中未检索到可靠依据。请换个问题或稍后再试。",
         references=[],
         graph_facts=[],
         trace=Trace(
-            understand=TraceUnderstand(raw=question, rewritten=question, entities=[]),
-            retrieve=TraceRetrieve(vector_n=0, keyword_n=0, graph_n=0, entity_n=0),
-            fuse=TraceFuse(candidate_n=0),
+            understand=TraceUnderstand(raw=question, rewritten=question, entities=entities or []),
+            retrieve=TraceRetrieve(vector_n=vector_n, keyword_n=keyword_n, graph_n=graph_n, entity_n=entity_n),
+            fuse=TraceFuse(candidate_n=candidate_n),
             rerank=TraceRerank(evidence_n=evidence_n, confidence=confidence, status="知识库未匹配"),
         ),
     )
@@ -99,7 +109,12 @@ def ask(body: AskBody) -> AskResponse:
     question = body.question.strip()
 
     # 1. 问句理解：实体识别（词表来自图谱已发布节点；LLM 改写随阶段 3）
-    vocab = get_graph().all_entities()
+    try:
+        vocab = get_graph().all_entities()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail="图谱服务不可用，请检查 Neo4j 是否启动") from e
     entities = recognize_entities(question, vocab)
     entity_names = [e["name"] for e in entities]
 
@@ -110,29 +125,46 @@ def ask(body: AskBody) -> AskResponse:
         raise HTTPException(status_code=503, detail=str(e)) from e
     vector_hits = get_store().search(q_emb, top_k=s.semantic_k)
     keyword_hits = get_keyword_index().search(question, top_k=s.keyword_k)
-    graph_facts = get_graph().neighbors(entity_names, hop=1)
+    try:
+        graph_facts = get_graph().neighbors(entity_names, hop=1)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail="图谱服务不可用，请检查 Neo4j 是否启动") from e
 
     # 3. RRF 融合（向量 + 关键词）
     fused = rrf_fuse([vector_hits, keyword_hits], k=s.rrf_k)[: s.fuse_candidate]
 
     # 4. 精排取最终证据
-    ranked = rerank(
-        question,
-        [f"{c['title']}：{c['text']}" for c in fused],
-        top_n=s.rerank_top_n,
-    )
+    try:
+        ranked = rerank(
+            question,
+            [f"{c['title']}：{c['text']}" for c in fused],
+            top_n=s.rerank_top_n,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
     evidence = [
         {**fused[r["index"]], "score": r["score"]} for r in ranked
     ]
 
-    # 5. 置信度兜底（方案 4.4：证据数=0 或 rerank top 分数低于阈值 → 拒答，图谱事实为强证据独立支撑）
+    # 5. 置信度兜底（方案 4.4）与图谱强证据豁免
     low_confidence = bool(evidence) and evidence[0]["score"] < s.evidence_min_score
     if (not evidence or low_confidence) and not graph_facts:
         return _fallback_response(
             question,
+            entities=entity_names,
+            vector_n=len(vector_hits),
+            keyword_n=len(keyword_hits),
+            graph_n=len(graph_facts),
+            entity_n=len(entity_names),
+            candidate_n=len(fused),
             evidence_n=len(evidence),
             confidence=evidence[0]["score"] if evidence else 0.0,
         )
+    # 图谱强证据豁免：低置信但图谱命中 → 剔除低分文献噪声，图谱事实独立支撑
+    if low_confidence:
+        evidence = [e for e in evidence if e["score"] >= s.evidence_min_score]
 
     # 6. 组装 Prompt：图谱事实 + 文献证据
     graph_block = "\n".join(
@@ -141,7 +173,7 @@ def ask(body: AskBody) -> AskResponse:
     evidence_block = "\n\n".join(
         f"[{i + 1}] 《{h['doc_name']}》{h['chapter']}（序号 {h['page_no']}）\n{h['title']}：{h['text']}"
         for i, h in enumerate(evidence)
-    )
+    ) or "（无）"
     template = PROMPT_PATH.read_text(encoding="utf-8")
     prompt = template.format(graph_facts=graph_block, evidence=evidence_block, question=question)
 
@@ -151,7 +183,7 @@ def ask(body: AskBody) -> AskResponse:
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
-    confidence = evidence[0]["score"] if evidence else 0.0
+    confidence = max((e["score"] for e in evidence), default=0.0)
     return AskResponse(
         answer=answer,
         references=[

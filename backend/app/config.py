@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     semantic_k: int = 20        # 语义召回数
     keyword_k: int = 20         # 关键词召回数
     fuse_candidate: int = 25    # 融合候选数
-    final_evidence: int = 5     # 最终证据数
+    final_evidence: int = 5     # 阶段 5 推理配置页预留；当前精排证据数由 rerank_top_n 生效
     rrf_k: int = 60             # 融合平衡系数
     rerank_top_n: int = 5       # 精排取前 N（与 final_evidence 联动）
     evidence_min_score: float = 0.3   # rerank 相关性阈值：top 分低于此且无图谱事实 → 拒答兜底

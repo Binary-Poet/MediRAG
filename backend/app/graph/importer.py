@@ -24,7 +24,7 @@ def import_seed(graph=None, path: Path = SEED_PATH) -> dict:
 
     for n in nodes:
         graph.execute_write(
-            "MERGE (n:`" + n["type"] + "` {name: $name}) "
+            "MERGE (n:`" + n["type"].replace("`", "``") + "` {name: $name}) "
             "SET n.alias = $alias, n.desc = $desc, n.source = $source, "
             "n.type = $type, n.status = '已发布'",
             name=n["name"], alias=n["alias"], desc=n["desc"],
@@ -35,7 +35,7 @@ def import_seed(graph=None, path: Path = SEED_PATH) -> dict:
     for e in edges:
         graph.execute_write(
             "MATCH (a {name: $s}), (b {name: $t}) "
-            "MERGE (a)-[r:`" + e["relation"] + "`]->(b) SET r.note = $note",
+            "MERGE (a)-[r:`" + e["relation"].replace("`", "``") + "`]->(b) SET r.note = $note",
             s=id_to_name[e["source"]], t=id_to_name[e["target"]], note=e.get("note", ""),
         )
 

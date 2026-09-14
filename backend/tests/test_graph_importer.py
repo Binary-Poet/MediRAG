@@ -2,8 +2,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from app.graph.importer import import_seed
 
 

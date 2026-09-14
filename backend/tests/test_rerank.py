@@ -18,6 +18,13 @@ def _fake_post_ok(monkeypatch, results=None):
 def test_rerank_returns_top_n_sorted(monkeypatch):
     _fake_post_ok(monkeypatch)
 
+    class FakeSettings:
+        siliconflow_api_key = "fake-key"
+        siliconflow_base_url = "http://fake"
+        rerank_model = "fake-model"
+
+    monkeypatch.setattr(rerank_mod, "get_settings", lambda: FakeSettings())
+
     out = rerank("人参的功效", ["文本a", "文本b"])
 
     assert out == [{"index": 1, "score": 0.90}, {"index": 0, "score": 0.70}]

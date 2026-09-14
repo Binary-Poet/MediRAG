@@ -41,7 +41,7 @@ def _fake_graph():
 
 def _patch_all(client, monkeypatch, tmp_path, graph=None):
     monkeypatch.setattr(chat_module, "get_store", lambda: _fake_store(tmp_path))
-    monkeypatch.setattr(chat_module, "get_keyword_index", lambda: KeywordIndex().build([]) or KeywordIndex())
+    monkeypatch.setattr(chat_module, "get_keyword_index", lambda: KeywordIndex())
     monkeypatch.setattr(chat_module, "get_graph", lambda: graph if graph is not None else _fake_graph())
     monkeypatch.setattr(chat_module, "embed_texts", lambda texts: [[1.0, 0.0]])
     monkeypatch.setattr(
@@ -136,6 +136,50 @@ def test_ask_low_rerank_score_triggers_fallback(client, monkeypatch, tmp_path) -
     assert body["trace"]["rerank"]["evidence_n"] == 1
     assert body["trace"]["rerank"]["confidence"] == 0.12
     assert body["trace"]["rerank"]["status"] == "知识库未匹配"
+
+
+def test_ask_low_rerank_keeps_real_trace_numbers(client, monkeypatch, tmp_path) -> None:
+    empty_graph = MagicMock()
+    empty_graph.all_entities.return_value = []
+    empty_graph.neighbors.return_value = []
+    _patch_all(client, monkeypatch, tmp_path, graph=empty_graph)
+    monkeypatch.setattr(
+        chat_module,
+        "rerank",
+        lambda query, docs, top_n: [{"index": 0, "score": 0.12}],
+    )
+
+    resp = client.post("/api/chat/ask", json={"question": "今天天气怎么样"})
+
+    assert resp.status_code == 200
+    t = resp.json()["trace"]
+    # 兜底 trace 透传真实数字，不再全 0
+    assert t["understand"]["entities"] == []
+    assert t["retrieve"]["vector_n"] == 1
+    assert t["retrieve"]["graph_n"] == 0
+    assert t["fuse"]["candidate_n"] == 1
+    assert t["rerank"]["evidence_n"] == 1
+    assert t["rerank"]["status"] == "知识库未匹配"
+
+
+def test_ask_low_rerank_with_graph_facts_keeps_evidence(client, monkeypatch, tmp_path) -> None:
+    # 图谱非空（_fake_graph 返回 1 条「组成」边）；rerank 低分 → 走图谱强证据豁免
+    _patch_all(client, monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        chat_module,
+        "rerank",
+        lambda query, docs, top_n: [{"index": 0, "score": 0.12}],
+    )
+
+    resp = client.post("/api/chat/ask", json={"question": "四君子汤由哪些中药组成？"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "人参" in body["answer"]
+    assert body["graph_facts"] != []
+    # 低分文献被剔除，references 为空；图谱事实独立支撑生成
+    assert body["references"] == []
+    assert body["trace"]["rerank"]["status"] == "证据充分，正常生成"
 
 
 def test_ask_rejects_empty_question(client) -> None:
