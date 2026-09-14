@@ -1,0 +1,84 @@
+{
+  "meta": {
+    "version": "0.1",
+    "source": "内置中医药教学演示数据（需专业审核）",
+    "status_note": "seed 数据导入 Neo4j 时 status=已发布；其余待抽取三元组 status=候选，经人工审核后发布"
+  },
+  "nodes": [
+    { "id": "formula_sijunzitang", "name": "四君子汤", "type": "方剂", "alias": "", "desc": "经典益气健脾基础方，人参、白术、茯苓、炙甘草四药配伍，共奏益气健脾之效", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "formula_guipitang", "name": "归脾汤", "type": "方剂", "alias": "", "desc": "益气补血、健脾养心之方，主治心脾两虚之心悸怔忡、失眠健忘", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "formula_suanzaorentang", "name": "酸枣仁汤", "type": "方剂", "alias": "", "desc": "养血安神之方，主治虚劳虚烦不得眠", "source": "内置中医药教学演示数据（需专业审核）" },
+
+    { "id": "herb_renshen", "name": "人参", "type": "中药", "alias": "园参、山参", "desc": "传统补气类中药，个体使用需结合体质、证候和合并用药", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_baizhu", "name": "白术", "type": "中药", "alias": "", "desc": "益气健脾、燥湿利水之品", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_fuling", "name": "茯苓", "type": "中药", "alias": "", "desc": "利水渗湿、健脾宁心之品", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_zhigancao", "name": "炙甘草", "type": "中药", "alias": "", "desc": "补脾和胃、益气复脉，缓和药性之品", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_huangqi", "name": "黄芪", "type": "中药", "alias": "", "desc": "补气升阳之要药", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_danggui", "name": "当归", "type": "中药", "alias": "", "desc": "补血活血、调经止痛之品", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_yuanzhi", "name": "远志", "type": "中药", "alias": "", "desc": "安神益智、交通心肾之品", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_longyanrou", "name": "龙眼肉", "type": "中药", "alias": "桂圆肉", "desc": "补益心脾、养血安神之品", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_suanzaoren", "name": "酸枣仁", "type": "中药", "alias": "", "desc": "养心补肝、宁心安神、敛汗生津之品", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_muxiang", "name": "木香", "type": "中药", "alias": "", "desc": "行气止痛、健脾消食之品", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_gancao", "name": "甘草", "type": "中药", "alias": "", "desc": "补脾益气、清热解毒、调和诸药之品", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_zhimu", "name": "知母", "type": "中药", "alias": "", "desc": "清热泻火、滋阴润燥之品", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_chuanxiong", "name": "川芎", "type": "中药", "alias": "", "desc": "活血行气、祛风止痛之品", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_bingtang", "name": "冰糖", "type": "中药", "alias": "", "desc": "补中和胃、润肺止咳之品（食用/食疗）", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "herb_beishashen", "name": "北沙参", "type": "中药", "alias": "", "desc": "养阴清肺、益胃生津之品", "source": "内置中医药教学演示数据（需专业审核）" },
+
+    { "id": "syndrome_piqixu", "name": "脾气虚", "type": "证候", "alias": "", "desc": "脾胃运化功能减退、气血生化不足之证", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "syndrome_xinpiliangxu", "name": "心脾两虚", "type": "证候", "alias": "", "desc": "心血不足与脾气虚弱并存之证", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "syndrome_fenghanbiao", "name": "风寒束表", "type": "证候", "alias": "", "desc": "外感风寒、卫阳被遏之表证", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "syndrome_fengrebiao", "name": "风热犯表", "type": "证候", "alias": "", "desc": "外感风热、肺卫失宣之表证", "source": "内置中医药教学演示数据（需专业审核）" },
+
+    { "id": "symptom_bianbian", "name": "便溏", "type": "症状", "alias": "", "desc": "大便稀溏不成形，多属脾虚湿盛", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "symptom_jianwang", "name": "健忘", "type": "症状", "alias": "", "desc": "记忆力减退，多与心脾两虚有关", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "symptom_kouke", "name": "口渴", "type": "症状", "alias": "", "desc": "口干欲饮，需辨虚实寒热", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "symptom_kouzaoyangan", "name": "口燥咽干", "type": "症状", "alias": "", "desc": "口咽干燥，多属阴虚津亏", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "symptom_farezhongweiefeng", "name": "发热重微恶风", "type": "症状", "alias": "", "desc": "发热较甚而轻微恶风，多见于风热表证", "source": "内置中医药教学演示数据（需专业审核）" },
+
+    { "id": "effect_yiqi_jiangpi", "name": "益气健脾", "type": "功效", "alias": "", "desc": "补益中气、健运脾胃之功", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "effect_yiqi_buxue", "name": "益气补血健脾养心", "type": "功效", "alias": "", "desc": "补气养血、健脾养心之功", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "effect_yangxue_anshen", "name": "养血安神", "type": "功效", "alias": "", "desc": "滋养心血、安定神志之功", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "effect_yangyin_yiweishengjin", "name": "养阴益胃生津", "type": "功效", "alias": "", "desc": "滋养胃阴、生津润燥之功", "source": "内置中医药教学演示数据（需专业审核）" },
+
+    { "id": "contra_allergy", "name": "对方剂成分过敏者禁用", "type": "禁忌", "alias": "", "desc": "对方剂任一组成成分过敏者不应使用", "source": "内置中医药教学演示数据（需专业审核）" },
+    { "id": "contra_zhenghou_bufu", "name": "证候不符不得使用", "type": "禁忌", "alias": "", "desc": "证候与方剂主治不符时不得使用", "source": "内置中医药教学演示数据（需专业审核）" }
+  ],
+  "edges": [
+    { "source": "formula_sijunzitang", "relation": "组成", "target": "herb_renshen", "note": "四君子汤由人参、白术、茯苓、炙甘草四味组成" },
+    { "source": "formula_sijunzitang", "relation": "组成", "target": "herb_baizhu", "note": "四君子汤组成之一" },
+    { "source": "formula_sijunzitang", "relation": "组成", "target": "herb_fuling", "note": "四君子汤组成之一" },
+    { "source": "formula_sijunzitang", "relation": "组成", "target": "herb_zhigancao", "note": "四君子汤组成之一" },
+    { "source": "formula_sijunzitang", "relation": "主治", "target": "syndrome_piqixu", "note": "四君子汤主治脾胃气虚证" },
+    { "source": "formula_sijunzitang", "relation": "功效", "target": "effect_yiqi_jiangpi", "note": "四君子汤益气健脾" },
+    { "source": "formula_sijunzitang", "relation": "禁忌", "target": "contra_allergy", "note": "对组成成分过敏者禁用" },
+    { "source": "formula_sijunzitang", "relation": "禁忌", "target": "contra_zhenghou_bufu", "note": "证候不符不得使用" },
+
+    { "source": "formula_guipitang", "relation": "组成", "target": "herb_renshen", "note": "归脾汤组成之一" },
+    { "source": "formula_guipitang", "relation": "组成", "target": "herb_huangqi", "note": "归脾汤组成之一" },
+    { "source": "formula_guipitang", "relation": "组成", "target": "herb_baizhu", "note": "归脾汤组成之一" },
+    { "source": "formula_guipitang", "relation": "组成", "target": "herb_danggui", "note": "归脾汤组成之一" },
+    { "source": "formula_guipitang", "relation": "组成", "target": "herb_fuling", "note": "归脾汤组成之一" },
+    { "source": "formula_guipitang", "relation": "组成", "target": "herb_yuanzhi", "note": "归脾汤组成之一" },
+    { "source": "formula_guipitang", "relation": "组成", "target": "herb_longyanrou", "note": "归脾汤组成之一" },
+    { "source": "formula_guipitang", "relation": "组成", "target": "herb_muxiang", "note": "归脾汤组成之一" },
+    { "source": "formula_guipitang", "relation": "组成", "target": "herb_zhigancao", "note": "归脾汤组成之一" },
+    { "source": "formula_guipitang", "relation": "主治", "target": "syndrome_xinpiliangxu", "note": "归脾汤主治心脾两虚证" },
+    { "source": "formula_guipitang", "relation": "功效", "target": "effect_yiqi_buxue", "note": "归脾汤益气补血、健脾养心" },
+    { "source": "formula_guipitang", "relation": "禁忌", "target": "contra_allergy", "note": "对组成成分过敏者禁用" },
+
+    { "source": "formula_suanzaorentang", "relation": "组成", "target": "herb_suanzaoren", "note": "酸枣仁汤以酸枣仁为君" },
+    { "source": "formula_suanzaorentang", "relation": "组成", "target": "herb_fuling", "note": "酸枣仁汤组成之一" },
+    { "source": "formula_suanzaorentang", "relation": "组成", "target": "herb_zhimu", "note": "酸枣仁汤组成之一" },
+    { "source": "formula_suanzaorentang", "relation": "组成", "target": "herb_gancao", "note": "酸枣仁汤组成之一" },
+    { "source": "formula_suanzaorentang", "relation": "组成", "target": "herb_chuanxiong", "note": "酸枣仁汤组成之一" },
+    { "source": "formula_suanzaorentang", "relation": "功效", "target": "effect_yangxue_anshen", "note": "酸枣仁汤养血安神" },
+    { "source": "formula_suanzaorentang", "relation": "禁忌", "target": "contra_allergy", "note": "对组成成分过敏者禁用" },
+    { "source": "formula_suanzaorentang", "relation": "禁忌", "target": "contra_zhenghou_bufu", "note": "证候不符不得使用" },
+
+    { "source": "syndrome_piqixu", "relation": "表现", "target": "symptom_bianbian", "note": "脾虚运化失司可见便溏" },
+    { "source": "syndrome_xinpiliangxu", "relation": "表现", "target": "symptom_jianwang", "note": "心脾两虚可见健忘" },
+    { "source": "syndrome_fengrebiao", "relation": "表现", "target": "symptom_farezhongweiefeng", "note": "风热犯表发热重而恶风轻" },
+    { "source": "syndrome_xinpiliangxu", "relation": "表现", "target": "symptom_kouzaoyangan", "note": "阴津不足口燥咽干" }
+  ]
+}

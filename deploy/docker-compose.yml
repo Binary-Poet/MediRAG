@@ -1,0 +1,39 @@
+# 阶段 0 中间件：Neo4j + MySQL（Milvus 用 milvus-lite 内嵌免容器；Redis 为 P1 可选）
+# 启动：docker compose -f deploy/docker-compose.yml up -d
+# 验收：http://localhost:7474 打开 Neo4j Browser（首次登录 neo4j / medirag123）
+services:
+  neo4j:
+    image: neo4j:5.20
+    container_name: medirag-neo4j
+    ports:
+      - "7474:7474" # HTTP Browser
+      - "7687:7687" # Bolt
+    environment:
+      NEO4J_AUTH: neo4j/medirag123
+    volumes:
+      - neo4j_data:/data
+
+  mysql:
+    image: mysql:8.4
+    container_name: medirag-mysql
+    # 本机 3306 已有 MySQL 服务，宿主端口改用 3307（.env 中 MYSQL_DSN 同步）
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: medirag
+      MYSQL_USER: medirag
+      MYSQL_PASSWORD: medirag123
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  # P1 会话记忆时取消注释
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: medirag-redis
+  #   ports:
+  #     - "6379:6379"
+
+volumes:
+  neo4j_data:
+  mysql_data:

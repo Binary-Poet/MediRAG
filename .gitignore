@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# 环境变量（.env.example 保留）
+.env
+
+# 前端
+node_modules/
+dist/
+web/dist/
+
+# milvus-lite 本地库文件（data/ 下的 seed 语料/图谱/评测集需保留）
+data/milvus/
+
+# IDE / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

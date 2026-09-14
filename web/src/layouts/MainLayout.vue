@@ -1,0 +1,177 @@
+<script setup lang="ts">
+// 主布局：深墨绿侧边栏（7 菜单）+ 顶栏（面包屑 + 服务标签 + 用户下拉）
+// 结构依据《前端还原规格.md》全局规范；文案与截图一致
+import { useRoute } from 'vue-router'
+import { computed } from 'vue'
+
+const route = useRoute()
+const pageTitle = computed(() => (route.meta.title as string) ?? '')
+
+const menus = [
+  { path: '/qa', title: '辨证问答', icon: 'ChatDotRound' },
+  { path: '/graph', title: '本草图谱', icon: 'Share' },
+  { path: '/library', title: '典籍知识库', icon: 'Reading' },
+  { path: '/overview', title: '运行概览', icon: 'DataLine' },
+  { path: '/account', title: '账户管理', icon: 'User' },
+  { path: '/inference', title: '推理配置', icon: 'Setting' },
+  { path: '/profile', title: '我的档案', icon: 'Files' },
+]
+</script>
+
+<template>
+  <el-container class="main-layout">
+    <el-aside width="220px" class="sidebar">
+      <div class="logo">
+        <div class="logo-icon">🌿</div>
+        <div class="logo-text">
+          <div class="logo-name">本草智问</div>
+          <div class="logo-sub">中医药知识系统</div>
+        </div>
+      </div>
+      <el-menu
+        :default-active="$route.path"
+        router
+        class="sidebar-menu"
+        background-color="#1a3220"
+        text-color="#ffffff"
+        active-text-color="#ffffff"
+      >
+        <el-menu-item v-for="m in menus" :key="m.path" :index="m.path">
+          <el-icon><component :is="m.icon" /></el-icon>
+          <span>{{ m.title }}</span>
+        </el-menu-item>
+      </el-menu>
+      <div class="sidebar-footer">
+        <el-avatar :size="28" class="footer-avatar">系</el-avatar>
+        <span class="footer-name">系统管理员</span>
+      </div>
+    </el-aside>
+
+    <el-container>
+      <el-header class="topbar" height="56px">
+        <el-breadcrumb separator="/">
+          <el-breadcrumb-item>知识工作台</el-breadcrumb-item>
+          <el-breadcrumb-item>{{ pageTitle }}</el-breadcrumb-item>
+        </el-breadcrumb>
+        <div class="topbar-right">
+          <span class="service-tag">● 中医药知识服务</span>
+          <el-dropdown>
+            <span class="user-entry">
+              <el-avatar :size="26">系</el-avatar>
+              系统管理员 <el-icon><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item>退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </el-header>
+      <el-main class="content">
+        <router-view />
+      </el-main>
+    </el-container>
+  </el-container>
+</template>
+
+<style scoped>
+.main-layout {
+  height: 100%;
+}
+
+.sidebar {
+  background: #1a3220;
+  display: flex;
+  flex-direction: column;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 20px 14px;
+}
+
+.logo-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #2d6a4f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.logo-name {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.logo-sub {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+}
+
+.sidebar-menu {
+  border-right: none;
+  flex: 1;
+}
+
+.sidebar-menu :deep(.el-menu-item.is-active) {
+  background: #2d6a4f;
+}
+
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.footer-avatar {
+  background: #2d6a4f;
+  font-size: 12px;
+}
+
+.footer-name {
+  color: #fff;
+  font-size: 13px;
+}
+
+.topbar {
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.service-tag {
+  font-size: 12px;
+  color: #2d6a4f;
+}
+
+.user-entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #1f2937;
+}
+
+.content {
+  background: #f5f7f5;
+}
+</style>
