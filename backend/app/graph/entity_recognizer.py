@@ -7,30 +7,31 @@ from collections.abc import Iterable
 
 
 def recognize_entities(question: str, vocab: Iterable[dict]) -> list[dict]:
-    terms: list[tuple[str, dict]] = []
+    term_map: dict[str, dict] = {}
     for v in vocab:
-        cands = [v["name"], *(p.strip() for p in (v["alias"] or "").split("、") if p.strip())]
-        terms.extend((c, v) for c in cands if c)
-    # 最长优先，避免短词先占位截断长词（如"发热重微恶风" vs "发热"）
-    terms.sort(key=lambda t: -len(t[0]))
+        for c in [v["name"], *(p.strip() for p in (v["alias"] or "").split("、") if p.strip())]:
+            if c:                       # 主名先注册；别名与主名同串时保留主名（取先注册）
+                term_map.setdefault(c, v)
 
     hits: list[dict] = []
-    covered = [False] * len(question)
-    for term, v in terms:
-        start = 0
-        while True:
-            idx = question.find(term, start)
-            if idx < 0:
+    i, n = 0, len(question)
+    while i < n:
+        hit = None
+        for j in range(n, i, -1):       # 该位置最长优先
+            v = term_map.get(question[i:j])
+            if v is not None:
+                hit = (question[i:j], v)
                 break
-            if not any(covered[idx: idx + len(term)]):
-                for i in range(idx, idx + len(term)):
-                    covered[i] = True
-                hits.append({"name": v["name"], "type": v["type"], "matched": term})
-            start = idx + 1
+        if hit is None:
+            i += 1
+            continue
+        term, v = hit
+        hits.append({"name": v["name"], "type": v["type"], "matched": term})
+        i += len(term)
 
     seen: set[str] = set()
     ordered: list[dict] = []
-    for h in hits:  # 按原文顺序归并（别名命中归顺到主名）
+    for h in hits:
         if h["name"] not in seen:
             seen.add(h["name"])
             ordered.append(h)
