@@ -18,11 +18,13 @@ def test_fuse_dedup_shared_chunk_and_rank_above_single():
 
 def test_fuse_weights_shift_ranking():
     a, b = _chunk("a"), _chunk("b")
-    # 路 1 权重 10 > 路 2 权重 1：a 双分仍应超过 b 单分？此处验证权重放大路面排名
-    fused = rrf_fuse([[a], [b]], k=60, weights=[10.0, 1.0])
-    assert fused[0]["chunk_id"] == "a"
-    double = rrf_fuse([[a, b], [b, c := _chunk("c")]], k=60, weights=[1.0, 1.0])
-    assert double[0]["chunk_id"] == "b"
+    # 次序反转判别：a=100/61≈1.639 > b=100/62+1/61≈1.630 → [a, b]
+    # 若实现忽略权重：b=1/62+1/61≈0.0325 > a=1/61≈0.0164 → [b, a]，测试必失败
+    fused = rrf_fuse([[a, b], [b]], k=60, weights=[100.0, 1.0])
+    assert [d["chunk_id"] for d in fused] == ["a", "b"]
+    # 归一权重下次序为 [b, a]（跨路去重排首），验证函数整体仍按融合分正确排序
+    plain = rrf_fuse([[a, b], [b]], k=60)
+    assert [d["chunk_id"] for d in plain] == ["b", "a"]
 
 
 def test_fuse_empty_and_empty_lists():
