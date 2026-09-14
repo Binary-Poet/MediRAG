@@ -1,20 +1,26 @@
 <script setup lang="ts">
-// 阶段 1 最简对话页：发送 → 回答 + 引用列表
-// 阶段 3 替换为完整辨证问答页（会话列表/溯源弹窗/SSE），结构届时按《前端还原规格》重做
+// 阶段 2 回答态：回答卡（安全框 / 图谱事实 / 溯源入口 / 证据折叠）+ 溯源弹窗（规格 P0-4 / P0-3）
 import { nextTick, ref } from 'vue'
 import { askQuestion } from '../../api/chat'
-import type { Reference } from '../../types/chat'
+import { theme } from '../../styles/theme'
+import type { Reference, Trace } from '../../types/chat'
+import TraceDialog from './components/TraceDialog.vue'
 
 interface QA {
   question: string
   answer: string
   references: Reference[]
+  graphFacts: { source: string; relation: string; target: string }[]
+  trace: Trace | null
 }
 
 const messages = ref<QA[]>([])
 const input = ref('')
 const loading = ref(false)
 const listRef = ref<HTMLElement>()
+
+const traceVisible = ref(false)
+const currentTrace = ref<Trace | null>(null)
 
 const suggestions = ['四君子汤由哪些中药组成？', '风寒束表与风热犯表有什么区别？', '人参的功效有哪些？']
 
@@ -23,7 +29,7 @@ async function send(q?: string) {
   if (!question || loading.value) return
   input.value = ''
   loading.value = true
-  messages.value.push({ question, answer: '', references: [] })
+  messages.value.push({ question, answer: '', references: [], graphFacts: [], trace: null })
   await nextTick()
   listRef.value?.scrollTo({ top: listRef.value.scrollHeight })
 
@@ -33,7 +39,11 @@ async function send(q?: string) {
       question,
       answer: resp.answer,
       references: resp.references,
+      graphFacts: resp.graph_facts,
+      trace: resp.trace,
     }
+    currentTrace.value = resp.trace
+    traceVisible.value = true
   } catch (e) {
     messages.value[messages.value.length - 1].answer = `请求失败：${(e as Error).message}`
   } finally {
@@ -41,6 +51,11 @@ async function send(q?: string) {
     await nextTick()
     listRef.value?.scrollTo({ top: listRef.value.scrollHeight })
   }
+}
+
+function openTrace(t: Trace | null) {
+  currentTrace.value = t
+  traceVisible.value = true
 }
 </script>
 
@@ -59,11 +74,32 @@ async function send(q?: string) {
         <div class="q">{{ m.question }}</div>
         <el-card class="a" shadow="never">
           <div class="answer-text">{{ m.answer || '正在生成…' }}</div>
+
+          <!-- 绿色安全提示框（有图谱事实时显示） -->
+          <div v-if="m.graphFacts.length" class="safety-box">
+            注意：以上组成信息严格依据图谱事实，不包含加减变化或现代制剂衍变；实际临床应用须经中医师辨证后使用，不可自行套方。
+          </div>
+
+          <!-- 图谱事实区 -->
+          <div v-if="m.graphFacts.length" class="graph-facts">
+            <div class="gf-title">图谱依据：</div>
+            <div v-for="(f, k) in m.graphFacts" :key="k" class="gf-item">
+              【图谱事实{{ k + 1 }}】 {{ f.source }} --{{ f.relation }}--> {{ f.target }}
+            </div>
+          </div>
+
+          <!-- 检索溯源按钮 -->
+          <div class="trace-entry">
+            <el-button link type="primary" :disabled="!m.trace" @click="openTrace(m.trace)">
+              知识检索与图谱溯源
+            </el-button>
+          </div>
+
           <el-collapse v-if="m.references.length" class="refs">
             <el-collapse-item :title="`证据来源 (${m.references.length})`">
               <div v-for="(r, j) in m.references" :key="r.chunk_id" class="ref-item">
+                <span class="ref-tag graph">文献</span>
                 [{{ j + 1 }}] {{ r.title }} —— {{ r.doc_name }} · {{ r.chapter }} · 序号 {{ r.page_no }}
-                <span class="score">相似度 {{ r.score.toFixed(3) }}</span>
               </div>
             </el-collapse-item>
           </el-collapse>
@@ -81,6 +117,8 @@ async function send(q?: string) {
       <el-button type="primary" :loading="loading" @click="send()">发送</el-button>
     </div>
     <p class="disclaimer">本草智问仅提供中医药知识科普，不替代辨证、诊断或个体化处方。如有紧急情况请拨打 120。</p>
+
+    <TraceDialog v-model:visible="traceVisible" :trace="currentTrace" />
   </div>
 </template>
 
@@ -141,6 +179,35 @@ async function send(q?: string) {
   line-height: 1.8;
 }
 
+.safety-box {
+  margin-top: 12px;
+  background: v-bind(theme.safetyBg);
+  color: v-bind(theme.safetyText);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.graph-facts {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.gf-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.gf-item {
+  padding: 2px 0;
+}
+
+.trace-entry {
+  margin-top: 10px;
+}
+
 .refs {
   margin-top: 12px;
   border-top: 1px dashed #e5e7eb;
@@ -152,10 +219,14 @@ async function send(q?: string) {
   padding: 2px 0;
 }
 
-.score {
-  color: #9ca3af;
-  font-size: 12px;
-  margin-left: 8px;
+.ref-tag {
+  display: inline-block;
+  font-size: 11px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-right: 6px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary-dark-2);
 }
 
 .input-bar {

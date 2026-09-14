@@ -1,9 +1,11 @@
 /** API 封装：阶段 1 问答接口（阶段 3 换 SSE 流式） */
-import type { Reference } from '../types/chat'
+import type { GraphFact, Reference, Trace } from '../types/chat'
 
 export interface AskResponse {
   answer: string
   references: Reference[]
+  graph_facts: GraphFact[]
+  trace: Trace
 }
 
 export async function askQuestion(question: string): Promise<AskResponse> {
