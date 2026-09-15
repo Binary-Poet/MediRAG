@@ -13,6 +13,7 @@ def _setup(monkeypatch, tmp_path):
     store = LocalVectorStore(str(tmp_path / "idx.json"))
     monkeypatch.setattr(dbmod, "_engine", engine)      # 所有 session_scope() 走测试库
     monkeypatch.setattr(pmod, "get_store", lambda: store)
+    monkeypatch.setattr(kmod, "get_store", lambda: store)  # rebuild 走同一内存库，不触磁盘配置路径
     monkeypatch.setattr(pmod, "embed_texts", lambda texts: [[float(len(t)), 1.0] for t in texts])
     return engine, store
 

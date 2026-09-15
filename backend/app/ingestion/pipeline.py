@@ -104,15 +104,17 @@ def ingest_document(document_id: int) -> dict:
         rebuild_keyword_index()
         with session_scope() as s:
             doc = s.get(Document, document_id)
-            doc.status = "就绪"
-            doc.chunk_count = len(chunks)
-            doc.error_message = ""
+            if doc is not None:
+                doc.status = "就绪"
+                doc.chunk_count = len(chunks)
+                doc.error_message = ""
         return {"chunks": len(chunks)}
     except Exception as e:
         with session_scope() as s:
             doc = s.get(Document, document_id)
-            doc.status = "失败"
-            doc.error_message = str(e)[:500]
+            if doc is not None:
+                doc.status = "失败"
+                doc.error_message = str(e)[:500]
         return {"chunks": 0, "error": str(e)}
 
 
