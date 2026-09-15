@@ -18,7 +18,8 @@ let timer: number | undefined
 const filtered = computed(() =>
   filterTopic.value ? docs.value.filter(d => d.topic === filterTopic.value) : docs.value)
 
-const STATUS_TAG: Record<string, string> = { 上传中: 'info', 处理中: 'warning', 就绪: 'success', 失败: 'danger' }
+const STATUS_TAG: Record<DocItem['status'], 'info' | 'warning' | 'success' | 'danger'> =
+  { 上传中: 'info', 处理中: 'warning', 就绪: 'success', 失败: 'danger' }
 
 async function refresh() {
   try {
@@ -39,14 +40,23 @@ async function pollPending() {
       const hit = docs.value.find(x => x.id === d.id)
       if (hit) { hit.status = st.status; hit.chunk_count = st.chunk_count }
       if (st.status === '失败') ElMessage.error(`${d.name} 入库失败：${st.error_message}`)
-      if (st.status === '就绪') totalChunks.value += st.chunk_count
+      // 就绪：不做本地累加（避免与 refresh 重复计数），改取后端权威统计
+      if (st.status === '就绪') { refresh(); continue }
     } catch { /* 轮询失败静默，下轮重试 */ }
   }
 }
 
 async function removeDoc(d: DocItem) {
-  await ElMessageBox.confirm(`确认删除《${d.name}》？其切片将从检索库移除。`, '删除确认', { type: 'warning' })
-  await fetch(`/api/documents/${d.id}`, { method: 'DELETE' })
+  try {
+    await ElMessageBox.confirm(`确认删除《${d.name}》？其切片将从检索库移除。`, '删除确认', { type: 'warning' })
+  } catch {
+    return // 用户取消：静默返回，不再冒泡成 console.error
+  }
+  const resp = await fetch(`/api/documents/${d.id}`, { method: 'DELETE' })
+  if (!resp.ok) {
+    ElMessage.error(`删除失败（${resp.status}）`)
+    return
+  }
   ElMessage.success('已删除')
   refresh()
 }
@@ -88,8 +98,8 @@ onUnmounted(() => window.clearInterval(timer))
         </el-table-column>
         <el-table-column prop="file_type" label="格式" width="80" />
         <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="STATUS_TAG[row.status] as any" size="small">{{ row.status }}</el-tag>
+          <template #default="{ row }: { row: DocItem }">
+            <el-tag :type="STATUS_TAG[row.status]" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="topic" label="知识主题" width="110" />
