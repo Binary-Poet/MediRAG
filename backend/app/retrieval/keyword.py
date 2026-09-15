@@ -29,9 +29,12 @@ class KeywordIndex:
             return []
         scores = self._bm25.get_scores(jieba.lcut(query))
         order = sorted(range(len(scores)), key=lambda i: -scores[i])[:top_k]
+        # rank_bm25(>=0.2.2) 对出现在半数以上文档的词项 idf 为负并取下限 eps（可为负）：
+        # 单文档语料（首篇入库后）所有词项都会得负分，> 0 过滤会丢光真实命中。
+        # 词项未命中任意文档时分数恒为 0.0，故用 != 0 过滤即可保留真命中、剔除无关项。
         return [
             {**self._chunks[i], "score": float(scores[i])}
-            for i in order if scores[i] > 0.0
+            for i in order if scores[i] != 0.0
         ]
 
 
@@ -45,3 +48,10 @@ def get_keyword_index() -> KeywordIndex:
         _index = KeywordIndex()
         _index.build(get_store().chunks)
     return _index
+
+
+def rebuild_keyword_index() -> int:
+    """按当前向量库语料重建关键词索引（入库/删除文档后调用）。返回切片数。"""
+    global _index
+    _index = KeywordIndex()
+    return _index.build(get_store().chunks)

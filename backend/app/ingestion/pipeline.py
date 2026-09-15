@@ -11,6 +11,13 @@ from pathlib import Path
 from app.llm.embedding import embed_texts
 from app.retrieval.vector_store import get_store
 
+from app.db import session_scope
+from app.models.document import Document
+
+from app.ingestion.parsers import ParseError, parse_document
+from app.ingestion.splitter import split_text
+from app.retrieval.keyword import rebuild_keyword_index
+
 # 默认语料路径：backend/../data/corpus/tcm_corpus.md
 DEFAULT_CORPUS = Path(__file__).resolve().parents[3] / "data" / "corpus" / "tcm_corpus.md"
 
@@ -69,6 +76,44 @@ def run_ingestion(corpus_path: Path = DEFAULT_CORPUS) -> dict:
     total = store.upsert(items)
     store.save()
     return {"ingested": len(chunks), "total_in_store": total}
+
+
+def ingest_document(document_id: int) -> dict:
+    """单文档入库流水线：解析 → 切片 → 向量化 → 入库 → BM25 重建 → 状态流转。
+
+    由上传接口以 BackgroundTasks 异步调用；任何异常都会把文档置为"失败"。
+    """
+    with session_scope() as s:
+        doc = s.get(Document, document_id)
+        if doc is None:
+            return {"chunks": 0, "error": "document not found"}
+        doc.status = "处理中"
+        stored_path, name, file_type, topic = doc.stored_path, doc.name, doc.file_type, doc.topic
+
+    try:
+        data = Path(stored_path).read_bytes()
+        text = parse_document(data, file_type)
+        chunks = split_text(text, doc_name=name, topic=topic)
+        if not chunks:
+            raise ParseError("解析结果为空（无可入库文本）")
+        embeddings = embed_texts([f"{c['title']}：{c['text']}" for c in chunks])
+        items = [{**c, "embedding": e} for c, e in zip(chunks, embeddings)]
+        store = get_store()
+        store.upsert(items)
+        store.save()
+        rebuild_keyword_index()
+        with session_scope() as s:
+            doc = s.get(Document, document_id)
+            doc.status = "就绪"
+            doc.chunk_count = len(chunks)
+            doc.error_message = ""
+        return {"chunks": len(chunks)}
+    except Exception as e:
+        with session_scope() as s:
+            doc = s.get(Document, document_id)
+            doc.status = "失败"
+            doc.error_message = str(e)[:500]
+        return {"chunks": 0, "error": str(e)}
 
 
 if __name__ == "__main__":
