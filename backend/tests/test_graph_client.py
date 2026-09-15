@@ -45,6 +45,19 @@ def test_neighbors_returns_facts_and_filters_status():
     assert kwargs["names"] == ["四君子汤"]
 
 
+def test_neighbors_filters_candidate_edges():
+    """C1：问答图谱只取已发布边，候选边（两端节点已发布时）不得泄漏。"""
+    driver = _fake_driver(_rx())
+    c = GraphClient("bolt://x", "u", "p", driver=driver)
+
+    c.neighbors(["四君子汤"], hop=1)
+
+    cypher = driver.session.return_value.__enter__.return_value.run.call_args.args[0]
+    assert "WITH r WHERE r.status = '已发布'" in cypher
+    assert "a.status = '已发布'" in cypher and "b.status = '已发布'" in cypher
+    assert "r.status AS status" in cypher
+
+
 def test_neighbors_empty_names_returns_empty():
     c = GraphClient("bolt://x", "u", "p", driver=MagicMock())
     assert c.neighbors([], hop=1) == []

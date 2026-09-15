@@ -31,24 +31,41 @@ def test_search_returns_items(client, monkeypatch):
 
 def test_neighbors_returns_nodes_and_links(client, monkeypatch):
     rows = [{"source": "四君子汤", "relation": "组成", "target": "人参",
-             "source_type": "方剂", "target_type": "中药", "status": "已发布",
-             "target_status": "已发布"}]
-    _use(monkeypatch, FakeGraph(rows=rows))
+             "source_type": "方剂", "target_type": "中药",
+             "source_status": "已发布", "target_status": "已发布", "status": "已发布"}]
+    fake = FakeGraph(rows=rows)
+    _use(monkeypatch, fake)
     body = client.get("/api/graph/neighbors", params={"name": "四君子汤", "hop": 2}).json()
     ids = {n["name"] for n in body["nodes"]}
     assert ids == {"四君子汤", "人参"}
     assert body["links"][0]["relation"] == "组成"
+    # links.status 取边状态（r.status），节点状态另取 source_status/target_status
+    cypher, _ = fake.calls[-1]
+    assert "r.status AS status" in cypher
+    assert "startNode(r).status AS source_status" in cypher
+    assert "endNode(r).status AS target_status" in cypher
 
 
 def test_neighbors_mixed_status_assigns_per_endpoint(client, monkeypatch):
     rows = [{"source": "四君子汤", "relation": "组成", "target": "人参",
              "source_type": "方剂", "target_type": "中药",
-             "status": "已发布", "target_status": "候选"}]
+             "source_status": "已发布", "target_status": "候选", "status": "候选"}]
     _use(monkeypatch, FakeGraph(rows=rows))
     body = client.get("/api/graph/neighbors", params={"name": "四君子汤"}).json()
     statuses = {n["name"]: n["status"] for n in body["nodes"]}
     assert statuses["四君子汤"] == "已发布"
     assert statuses["人参"] == "候选"
+
+
+def test_neighbors_link_status_reflects_edge_status(client, monkeypatch):
+    """C3：两端节点均已发布、边为候选时，links[0].status 应反映「边状态」而非源节点状态。"""
+    rows = [{"source": "四君子汤", "relation": "组成", "target": "人参",
+             "source_type": "方剂", "target_type": "中药",
+             "source_status": "已发布", "target_status": "已发布", "status": "候选"}]
+    _use(monkeypatch, FakeGraph(rows=rows))
+    body = client.get("/api/graph/neighbors", params={"name": "四君子汤"}).json()
+    assert body["links"][0]["status"] == "候选"
+    assert {n["status"] for n in body["nodes"]} == {"已发布"}
 
 
 def test_candidates_lists_pending_only(client, monkeypatch):

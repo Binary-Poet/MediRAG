@@ -53,6 +53,29 @@ def test_save_candidates_writes_candidate_status(monkeypatch):
     assert all(p.get("source_doc") in (None, "内科讲义.md") for _, p in calls if p)
 
 
+def test_save_candidates_sets_node_type_property(monkeypatch):
+    """C2：节点 MERGE 需写 n.type（供 search?type= 筛选与前端 6 类着色），既有节点用 COALESCE 补齐。"""
+    from app.graph.extractor import save_candidates
+
+    calls = []
+
+    class FakeGraph:
+        def execute_write(self, cypher, **params):
+            calls.append((cypher, params))
+
+    save_candidates([{"source": "补中益气汤", "relation": "主治", "target": "脾胃气虚证",
+                      "source_type": "方剂", "target_type": "证候"}],
+                    source_doc="内科讲义.md", graph=FakeGraph())
+
+    node_calls = [(c, p) for c, p in calls if "MERGE (n:" in c]
+    assert len(node_calls) == 2
+    for cypher, _ in node_calls:
+        assert "n.type = $type" in cypher                     # ON CREATE 写入 type
+        assert "n.type = COALESCE(n.type, $type)" in cypher   # ON MATCH 补齐、不覆盖
+    types = {p["name"]: p["type"] for _, p in node_calls}
+    assert types == {"补中益气汤": "方剂", "脾胃气虚证": "证候"}
+
+
 def test_save_candidates_preserves_published_on_match(monkeypatch):
     from app.graph.extractor import save_candidates
 

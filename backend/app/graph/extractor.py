@@ -61,9 +61,10 @@ def save_candidates(triples: list[dict], source_doc: str, graph=None) -> int:
         for name, label in ((t["source"], t["source_type"]), (t["target"], t["target_type"])):
             graph.execute_write(
                 f"MERGE (n:`{label.replace('`', '``')}` {{name: $name}}) "
-                "ON CREATE SET n.status = '候选', n.source = $source_doc "
-                "ON MATCH SET n.status = CASE WHEN n.status = '已发布' THEN '已发布' ELSE '候选' END",
-                name=name, source_doc=source_doc,
+                "ON CREATE SET n.status = '候选', n.source = $source_doc, n.type = $type "
+                "ON MATCH SET n.status = CASE WHEN n.status = '已发布' THEN '已发布' ELSE '候选' END, "
+                "n.type = COALESCE(n.type, $type)",
+                name=name, source_doc=source_doc, type=label,
             )
         graph.execute_write(
             f"MATCH (a {{name: $s}}), (b {{name: $t}}) "

@@ -1,6 +1,6 @@
 """Neo4j 客户端：连接管理与 1~2 跳图谱查询。
 
-只查询 status='已发布' 的节点（候选审核闭环：候选节点不进问答）。
+只查询 status='已发布' 的节点**与关系**（候选审核闭环：候选节点/候选边均不进问答）。
 """
 from neo4j import GraphDatabase
 
@@ -44,9 +44,11 @@ class GraphClient:
         MATCH p = (a)-[*1..{hop}]-(b)
         WHERE a.name IN $names AND a.status = '已发布' AND b.status = '已发布'
         UNWIND relationships(p) AS r
+        WITH r WHERE r.status = '已发布'
         RETURN DISTINCT startNode(r).name AS source, type(r) AS relation,
                endNode(r).name AS target,
-               startNode(r).type AS source_type, endNode(r).type AS target_type
+               startNode(r).type AS source_type, endNode(r).type AS target_type,
+               r.status AS status
         """
         with self._driver.session() as session:
             return session.run(cypher, names=names).data()
