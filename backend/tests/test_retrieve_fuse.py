@@ -89,5 +89,32 @@ def test_reflect_edge_triggers_once(monkeypatch):
 
 
 class _Cfg:
-    semantic_k = 20; keyword_k = 20; fuse_candidate = 25; final_evidence = 5
-    rrf_k = 60; rerank_top_n = 5; evidence_min_score = 0.3
+    def __init__(self, **over):
+        self.semantic_k = 20
+        self.keyword_k = 20
+        self.fuse_candidate = 25
+        self.final_evidence = 5
+        self.rrf_k = 60
+        self.rerank_top_n = 5
+        self.evidence_min_score = 0.3
+        for k, v in over.items():
+            setattr(self, k, v)
+
+
+def test_retrieve_reads_topk_from_settings(monkeypatch):
+    calls_kwargs = []
+
+    class FakeTool:
+        def __init__(self, name):
+            self._name = name
+        def invoke(self, kwargs):
+            calls_kwargs.append((self._name, dict(kwargs)))
+            return {"fact": self._name}
+
+    rmod.TOOLS = {n: FakeTool(n) for n in ["vector_search", "keyword_search", "graph_search"]}
+    monkeypatch.setattr(rmod, "get_settings",
+                        lambda: _Cfg(semantic_k=7, keyword_k=3))
+    rmod.retrieve(_state(intent="concept", entity_names=[], rewritten_query="风寒束表 风热犯表"))
+    kw = dict(calls_kwargs)
+    assert kw["vector_search"]["top_k"] == 7
+    assert kw["keyword_search"]["top_k"] == 3
