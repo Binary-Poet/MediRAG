@@ -16,6 +16,9 @@ web/dist/
 # milvus-lite 本地库文件（data/ 下的 seed 语料/图谱/评测集需保留）
 data/milvus/
 
+# 上传的原始文档（运行数据）
+data/uploads/
+
 # IDE / 系统
 .idea/
 .vscode/

@@ -55,9 +55,17 @@ class Settings(BaseSettings):
     neo4j_password: str = "medirag123"
     mysql_dsn: str = "mysql+pymysql://medirag:medirag123@localhost:3306/medirag"
 
+    # ===== 业务库（阶段 4：文档元数据/状态机；测试用 sqlite 注入覆盖）=====
+    database_url: str = ""
+
     # ===== 记忆/缓存 =====
     redis_mode: str = "memory"
     redis_url: str = "redis://localhost:6379/0"
+
+    @property
+    def sqlalchemy_url(self) -> str:
+        """业务库 DSN：DATABASE_URL 优先，缺省回落 MySQL DSN（阶段 2 已配）。"""
+        return self.database_url or self.mysql_dsn
 
 
 @lru_cache
