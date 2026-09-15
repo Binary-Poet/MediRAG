@@ -528,8 +528,6 @@ git commit -m "feat(agent): query understanding node with structured JSON + lexi
 - [ ] **Step 1: 写失败测试** `backend/tests/test_retrieve_fuse.py`
 
 ```python
-from unittest.mock import MagicMock
-
 import app.agent.nodes.fuse as fmod
 import app.agent.nodes.retrieve as rmod
 from app.agent.nodes.route import PLAN_MATRIX, route
@@ -563,46 +561,15 @@ def test_route_returns_safety_for_chitchat():
 
 def test_retrieve_invokes_tools_per_plan(monkeypatch):
     calls = []
-    def fake_vector(query, top_k):
-        calls.append("vector"); return [{"chunk_id": "v1", "title": "四君子汤", "text": "..."}]
-    def fake_keyword(query, top_k):
-        calls.append("keyword"); return [{"chunk_id": "k1"}]
-    def fake_graph(entity, hop):
-        calls.append("graph"); return {"entity": entity, "facts": [{"source": entity, "relation": "组成", "target": "人参"}]}
-    rmod.vector_search = MagicMock()  # 用 lambda 更直观：见下
-    # 直接 monkeypatch 模块内导入的工具名：
-    rmod.tools["vector_search"] = lambda **kw: fake_vector(**kw)
-    ...
-```
 
-> 注：retrieve 节点应这样引用工具，便于 monkeypatch。**retrieve.py 内部**按如下写法（并用 `tools` dict 映射）：
+    class FakeTool:
+        def __init__(self, name):
+            self._name = name
+        def invoke(self, kwargs):
+            calls.append(self._name)
+            return {"fact": self._name}
 
-```python
-from app.agent import tools as tool_module
-
-TOOLS = {
-    "vector_search": tool_module.vector_search,
-    "keyword_search": tool_module.keyword_search,
-    "graph_search": tool_module.graph_search,
-}
-```
-
-测试改为 monkeypatch `rmod.TOOLS` 的条目。完整测试如下（替换上面注释块）：
-
-```python
-def test_retrieve_invokes_tools_per_plan(monkeypatch):
-    calls = []
-
-    def mk(name):
-        def _fn(query=None, top_k=None, entity=None, hop=None):
-            calls.append(name)
-            return {"fact": name}
-        return _fn
-    rmod.TOOLS = {
-        "vector_search": mk("vector_search"),
-        "keyword_search": mk("keyword_search"),
-        "graph_search": mk("graph_search"),
-    }
+    rmod.TOOLS = {n: FakeTool(n) for n in ["vector_search", "keyword_search", "graph_search"]}
     upd = rmod.retrieve(_state(intent="complex", entity_names=["四君子汤"], rewritten_query="四君子汤组成"))
     assert upd["plan"] == ["vector_search", "keyword_search", "graph_search"]
     assert calls == ["vector_search", "keyword_search", "graph_search"]
@@ -611,11 +578,15 @@ def test_retrieve_invokes_tools_per_plan(monkeypatch):
 
 def test_retrieve_skips_graph_without_entities(monkeypatch):
     calls = []
-    def mk(name):
-        def _fn(**kw):
-            calls.append(name); return {"fact": name}
-        return _fn
-    rmod.TOOLS = {"vector_search": mk("v"), "keyword_search": mk("k"), "graph_search": mk("g")}
+
+    class FakeTool:
+        def __init__(self, name):
+            self._name = name
+        def invoke(self, kwargs):
+            calls.append(self._name)
+            return {"fact": self._name}
+
+    rmod.TOOLS = {n: FakeTool(n) for n in ["vector_search", "keyword_search", "graph_search"]}
     rmod.retrieve(_state(intent="concept", entity_names=[], rewritten_query="风寒束表与风热犯表的区别"))
     assert "graph_search" not in calls        # 无实体 → 跳过图谱
     assert calls == ["vector_search", "keyword_search"]
@@ -891,20 +862,6 @@ def _history_block(history: list) -> str:
     return "\n".join(f"【{'用户' if m['role'] == 'user' else '助手'}】{m['content']}" for m in history[-8:])
 ```
 
-> 注：Task 3 的 `_history_block` 与本文件重复——为 DRY，把 `_history_block` 提取到 `backend/app/agent/nodes/_util.py` 并在 understand.py 与 reflect.py 共用。新增文件 `_util.py`：
-
-```python
-"""节点共用工具。"""
-
-
-def history_block(history: list) -> str:
-    if not history:
-        return "（无）"
-    return "\n".join(f"【{'用户' if m['role'] == 'user' else '助手'}】{m['content']}" for m in history[-8:])
-```
-
-understand.py / reflect.py 改从 `from app.agent.nodes._util import history_block` 导入（替换各自的 `_history_block`）。此处一并改。
-
 `backend/app/agent/content`（context 节点，本 Task 一并实现以避免 workflow 引用未定义符号）：
 
 `backend/app/agent/nodes/context.py`：
@@ -1010,7 +967,7 @@ Expected: PASS（3 passed）
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/app/agent/nodes/_util.py backend/app/agent/nodes/reflect.py backend/app/agent/nodes/context.py backend/app/agent/nodes/safety.py backend/app/agent/workflow.py backend/app/agent/nodes/understand.py backend/tests/test_workflow.py
+git add backend/app/agent/nodes/reflect.py backend/app/agent/nodes/context.py backend/app/agent/nodes/safety.py backend/app/agent/workflow.py backend/tests/test_workflow.py
 git commit -m "feat(agent): reflect node, safety/context nodes, LangGraph workflow assembly"
 ```
 
@@ -1335,7 +1292,7 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
         refs = [
             {"chunk_id": c["chunk_id"], "title": c["title"], "doc_name": c["doc_name"],
              "chapter": c["chapter"], "page_no": c["page_no"], "score": c["score"]}
-            for c in final["evidence"] if c.get("score", 0) >= 0.0
+            for c in final["evidence"]
         ]
         yield sse("references", {"docs": refs, "graph_facts": final["graph_facts"]})
         yield sse("done", {"message_id": session_id, "metrics": {
@@ -1351,8 +1308,6 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 ```
-
-> 注：`references` 的 `score >= 0.0` 恒真（阶段 3 低置信已走 safety 分支）；若 wants 保留阶段 2 的噪声剔除语义，可将该过滤改为 `final["evidence"]`（safety 分支已把低分排除）。**采用 `c for c in final["evidence"]` 原样**，不再二次过滤。
 
 - [ ] **Step 4: 运行确认通过**
 
