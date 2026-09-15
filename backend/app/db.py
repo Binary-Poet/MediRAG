@@ -6,6 +6,7 @@ from contextlib import contextmanager
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.config import get_settings
 
@@ -18,6 +19,10 @@ def _make_engine(url: str):
     kwargs = {"echo": False}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
+        if url == "sqlite:///:memory:":
+            # :memory: 库默认 SingletonThreadPool 按线程隔离连接，TestClient 在独立
+            # 线程跑 app 会看到空库；StaticPool 让同一引擎的所有会话共用一条连接。
+            kwargs["poolclass"] = StaticPool
     return create_engine(url, **kwargs)
 
 

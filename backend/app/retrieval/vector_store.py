@@ -60,6 +60,18 @@ class LocalVectorStore:
             hits.append(hit)
         return hits
 
+    def remove_by_doc(self, doc_name: str) -> int:
+        """移除某文档的全部切片（删除文档时调用）。返回移除数。"""
+        keep = [c for c in self.chunks if c["doc_name"] != doc_name]
+        removed = len(self.chunks) - len(keep)
+        if removed == 0:
+            return 0
+        self.chunks = keep
+        valid = {c["chunk_id"] for c in keep}
+        self._vectors = {k: v for k, v in self._vectors.items() if k in valid}
+        self._rebuild_matrix()
+        return removed
+
     # ===== 持久化 =====
     def save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
