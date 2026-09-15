@@ -175,3 +175,24 @@ rerank   evidence_n=5 confidence=0.1686 status=知识库未匹配
 | 多轮指代正确改写 | ✅ 「它有什么禁忌？」→ 四君子汤禁忌 |
 | 乱问触发兜底 | ✅ low_confidence 拒答 |
 | 首轮不足、反思后补查成功 demo case | ✅ 真实触发 1 轮 reflect（初测记录）+ 图级测试 test_agent_graph.py 固化 |
+
+---
+
+## 协议偏差记录（阶段 3 终审 M-1 / M-2）
+
+阶段 3 实现与合并方案 spec 存在以下已知偏差，均经终审裁定为可接受，记录在案。
+
+### 1. `answer_cn_tcm.txt` 规则 4 保留（有利偏离）
+
+计划原意删除该硬话术（"知识库中未检索到可靠依据"），改为统一由 safety 拦截产出拒答。实际**保留为第二道防线**：与 safety 拦截构成双保险——即便 safety 未触发而 LLM 拿到空证据，也不会编造。保留是有利的偏离。
+
+### 2. spec 4.3 三处小偏差
+
+- **ok 路径不发 `safety{type:"ok"}`**：正常生成路径不发送 safety 事件，前端 `m.safety.type !== 'ok'` 的 `!== 'ok'` 判断成为死分支（防御性保留）。
+- **reflect 事件字段名为 `rewritten`**（spec 中为 `rewritten2`）：与 understand 事件字段命名统一。
+- **understand step 缺 `title` 字段**：trace step 事件未携带 title。
+- **`done.message_id` 实际填 `session_id`**：并非独立 message 主键。
+
+### 3. 新增 `error` 事件（不在 spec 4.3 事件列表内）
+
+阶段 3 为生成/检索阶段的异常收口引入 `error` 事件（`{"detail": ...}`）：LLM/网络/图执行异常时前端可显式提示，而非静默断流。spec 4.3 未列举该事件类型，属阶段 3 新增。
