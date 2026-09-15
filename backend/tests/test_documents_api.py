@@ -35,6 +35,48 @@ def test_upload_rejects_unsupported_ext(client, monkeypatch, tmp_path):
     assert "不支持" in resp.json()["detail"]
 
 
+def test_upload_sanitizes_path_traversal_filename(client, monkeypatch, tmp_path):
+    """带目录成分的文件名被剥离为纯文件名，且落盘不越出 UPLOAD_DIR。"""
+    _prepare(monkeypatch, tmp_path)
+    resp = client.post("/api/documents",
+                       files={"file": ("..\\..\\evil.md", b"x", "text/markdown")},
+                       data={"topic": "内科"})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "evil.md"
+
+    upload_dir = (tmp_path / "uploads").resolve()
+    files = list(upload_dir.glob("*"))
+    assert len(files) == 1
+    for p in files:
+        assert p.resolve().parent == upload_dir          # 无任何文件逃逸出上传目录
+
+
+def test_upload_rejects_windows_reserved_name(client, monkeypatch, tmp_path):
+    _prepare(monkeypatch, tmp_path)
+    resp = client.post("/api/documents",
+                       files={"file": ("CON.md", b"x", "text/markdown")},
+                       data={"topic": "内科"})
+    assert resp.status_code == 400
+    assert "文件名非法" in resp.json()["detail"]
+
+
+def test_upload_duplicate_name_conflicts_then_allows_after_delete(client, monkeypatch, tmp_path):
+    """同名未失败文档拒绝重复上传（409，不留孤儿文件）；删除后可重传同名。"""
+    _prepare(monkeypatch, tmp_path)
+    files = {"file": ("同名.md", "四君子汤由人参白术组成。".encode(), "text/markdown")}
+    first = client.post("/api/documents", files=files, data={"topic": "内科"})
+    assert first.status_code == 200
+
+    second = client.post("/api/documents", files=files, data={"topic": "内科"})
+    assert second.status_code == 409
+    assert "已存在同名文档" in second.json()["detail"]
+    assert len(list((tmp_path / "uploads").glob("*"))) == 1      # 409 未落孤儿文件
+
+    assert client.delete(f"/api/documents/{first.json()['id']}").status_code == 200
+    third = client.post("/api/documents", files=files, data={"topic": "内科"})
+    assert third.status_code == 200                              # 切片已清除，允许重传
+
+
 def test_upload_ingest_and_status_polling(client, monkeypatch, tmp_path):
     _prepare(monkeypatch, tmp_path)
     resp = client.post("/api/documents",

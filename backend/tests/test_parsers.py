@@ -90,6 +90,14 @@ def test_pdf_extraction():
     assert "Sijunzi" in parse_document(_pdf_bytes(), "pdf")
 
 
+def test_rtf_strips_control_words():
+    """RTF 控制字/字体表不得入库，仅保留可见文本。"""
+    text = parse_document(rb"{\rtf1\ansi\deff0 {\fonttbl{\f0 Times;}}\f0\fs24 Sijunzi Tang}", "rtf")
+    assert "Sijunzi Tang" in text
+    assert "fonttbl" not in text
+    assert "\\fs24" not in text
+
+
 def test_unsupported_ext_raises():
     with pytest.raises(ParseError):
         parse_document(b"x", "exe")

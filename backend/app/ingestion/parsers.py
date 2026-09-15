@@ -7,6 +7,7 @@
 """
 import io
 import json
+import re
 
 PLAIN_EXTS = {"txt", "md", "csv", "tsv", "json", "xml", "yaml", "yml", "log", "html", "rtf"}
 SUPPORTED_EXTS = PLAIN_EXTS | {"pdf", "docx", "xlsx", "xls", "pptx", "ppt", "doc"}
@@ -66,6 +67,16 @@ def _parse_pptx(data: bytes) -> str:
     return "\n".join(lines)
 
 
+def _parse_rtf(data: bytes) -> str:
+    """剥离 RTF 控制字，仅保留可见文本（最小实现）。"""
+    text = _decode(data)
+    text = re.sub(r"\\'([0-9a-fA-F]{2})", lambda m: bytes.fromhex(m.group(1)).decode("latin-1"), text)
+    text = re.sub(r"\\u(-?\d+)\??", lambda m: chr(int(m.group(1)) % 65536), text)
+    text = re.sub(r"\\[a-zA-Z]+-?\d* ?", " ", text)      # 控制字
+    text = text.replace("{", " ").replace("}", " ")
+    return re.sub(r"[ \t]{2,}", " ", text).strip()
+
+
 def parse_document(data: bytes, ext: str) -> str:
     """按扩展名解析为纯文本。不支持/失败抛 ParseError。"""
     ext = ext.lower().lstrip(".")
@@ -83,7 +94,7 @@ def parse_document(data: bytes, ext: str) -> str:
         if ext == "doc":
             raise ParseError("老版 .doc 二进制格式不支持，请另存为 .docx 后上传")
         if ext == "rtf":
-            return _decode(data)          # RTF 为文本标记格式，直接解码
+            return _parse_rtf(data)
         text = _decode(data)
         if ext == "json":
             try:

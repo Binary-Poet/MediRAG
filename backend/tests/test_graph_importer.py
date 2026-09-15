@@ -43,3 +43,14 @@ def test_import_seed_merges_nodes_and_edges(tmp_path):
     assert node_calls[0][1]["name"] == "人参"
     # 边端点用 name 关联（seed 边以 id 引用，导入前需映射 id -> name）
     assert edge_calls[0][1] == {"s": "四君子汤", "t": "人参", "note": "组成之一"}
+
+
+def test_import_seed_does_not_publish_existing_candidate_edges(tmp_path):
+    """重导入不得把既有候选边翻转为已发布（CASE 守卫）。"""
+    g = FakeGraph()
+    seed_path = _seed(tmp_path)
+
+    import_seed(g, path=seed_path)
+
+    edge_calls = [c for c in g.calls if c[0].startswith("MATCH (a")]
+    assert "CASE WHEN r.status = '候选' THEN '候选' ELSE '已发布' END" in edge_calls[0][0]

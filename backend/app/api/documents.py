@@ -18,6 +18,10 @@ MAX_UPLOAD_BYTES = 100 * 1024 * 1024          # 规格：单文件 ≤100MB
 TOPICS = ["内科", "外科", "儿科", "妇科", "情志脑病", "筋骨伤科", "皮肤病证", "五官病证"]
 UPLOAD_DIR = Path(__file__).resolve().parents[3] / "data" / "uploads"
 
+# Windows 保留设备名（大小写不敏感，含扩展名仍保留）。落盘前拒绝，避免写入特殊路径。
+_WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL",
+                     *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
 
 class DocumentOut(BaseModel):
     id: int
@@ -41,10 +45,14 @@ class DocumentOut(BaseModel):
 async def upload_document(background: BackgroundTasks,
                           file: UploadFile = File(...),
                           topic: str = Form("")) -> dict:
-    """上传文档：校验主题/格式/大小 → 落盘 → 建记录 → 后台入库。"""
+    """上传文档：校验主题/文件名/格式/大小 → 落盘 → 查重 → 建记录 → 后台入库。"""
     if topic not in TOPICS:
         raise HTTPException(status_code=422, detail=f"知识主题必选，取值：{'/'.join(TOPICS)}")
-    name = file.filename or "unnamed"
+    raw_name = file.filename or "unnamed"
+    name = Path(raw_name).name                      # 只取纯文件名（剥离任何目录成分）
+    stem = name.rsplit(".", 1)[0].upper()
+    if not name or name in {".", ".."} or name != Path(name).name or stem in _WINDOWS_RESERVED:
+        raise HTTPException(status_code=400, detail="文件名非法")
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
     if ext not in SUPPORTED_EXTS:
         raise HTTPException(status_code=400, detail=f"不支持的文件格式：.{ext}")
@@ -58,6 +66,12 @@ async def upload_document(background: BackgroundTasks,
     stored.write_bytes(data)
 
     with session_scope() as s:
+        dup = s.query(Document).filter(Document.name == name,
+                                       Document.status != "失败").first()
+        if dup is not None:
+            stored.unlink(missing_ok=True)          # 清掉刚落盘文件，避免孤儿
+            raise HTTPException(status_code=409,
+                                detail=f"已存在同名文档《{name}》（id={dup.id}），请改名后上传")
         doc = Document(name=name, file_type=ext, size=len(data), topic=topic,
                        status="上传中", stored_path=str(stored))
         s.add(doc)
