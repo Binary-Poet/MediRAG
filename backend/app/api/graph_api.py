@@ -37,14 +37,16 @@ def neighbors(name: str, hop: int = 2) -> dict:
         f"MATCH p = (a)-[*1..{hop}]-(b) WHERE a.name = $name "
         "UNWIND relationships(p) AS r "
         "RETURN DISTINCT startNode(r).name AS source, type(r) AS relation, endNode(r).name AS target, "
-        "startNode(r).type AS source_type, endNode(r).type AS target_type, startNode(r).status AS status",
+        "startNode(r).type AS source_type, endNode(r).type AS target_type, "
+        "startNode(r).status AS status, endNode(r).status AS target_status",
         name=name,
     )
     nodes: dict[str, dict] = {}
     links: list[dict] = []
     for r in rows:
-        for n, t in ((r["source"], r["source_type"]), (r["target"], r["target_type"])):
-            nodes.setdefault(n, {"id": n, "name": n, "category": t, "status": r["status"]})
+        for n, t, s in ((r["source"], r["source_type"], r["status"]),
+                        (r["target"], r["target_type"], r["target_status"])):
+            nodes.setdefault(n, {"id": n, "name": n, "category": t, "status": s})
         links.append({"source": r["source"], "target": r["target"],
                       "relation": r["relation"], "status": r["status"]})
     return {"nodes": list(nodes.values()), "links": links}
@@ -108,9 +110,20 @@ def approve(body: ApproveBody) -> dict:
 def reject(body: ApproveBody) -> dict:
     graph = get_graph()
     if body.kind == "node":
-        graph.execute_write("MATCH (n {name: $name}) WHERE n.status = '候选' DETACH DELETE n", name=body.name)
+        if not body.name:
+            raise HTTPException(status_code=422, detail="node 需提供 name")
+        refs = _read(
+            "MATCH (n {name: $name})-[r]-() WHERE r.status = '已发布' RETURN count(r) AS n",
+            name=body.name,
+        )
+        if refs and refs[0]["n"] > 0:
+            raise HTTPException(status_code=409, detail="该实体被已发布关系引用，请先驳回相关关系")
+        graph.execute_write("MATCH (n {name: $name}) WHERE n.status = '候选' DETACH DELETE n",
+                           name=body.name)
         return {"rejected": "node", "name": body.name}
     if body.kind == "edge":
+        if not (body.source and body.relation and body.target):
+            raise HTTPException(status_code=422, detail="edge 需提供 source/relation/target")
         graph.execute_write(
             "MATCH (a {name: $s})-[r]->(b {name: $t}) WHERE type(r) = $rel AND r.status = '候选' DELETE r",
             s=body.source, t=body.target, rel=body.relation,

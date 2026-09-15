@@ -20,15 +20,19 @@ def _use(monkeypatch, fake):
 
 
 def test_search_returns_items(client, monkeypatch):
-    _use(monkeypatch, FakeGraph(rows=[{"name": "四君子汤", "type": "方剂", "alias": "", "status": "已发布"}]))
+    fake = FakeGraph(rows=[{"name": "四君子汤", "type": "方剂", "alias": "", "status": "已发布"}])
+    _use(monkeypatch, fake)
     resp = client.get("/api/graph/search", params={"entity": "四君子"})
     assert resp.status_code == 200
     assert resp.json()["items"][0]["name"] == "四君子汤"
+    cypher, _ = fake.calls[0]
+    assert "n.status IN ['已发布','候选']" in cypher
 
 
 def test_neighbors_returns_nodes_and_links(client, monkeypatch):
     rows = [{"source": "四君子汤", "relation": "组成", "target": "人参",
-             "source_type": "方剂", "target_type": "中药", "status": "已发布"}]
+             "source_type": "方剂", "target_type": "中药", "status": "已发布",
+             "target_status": "已发布"}]
     _use(monkeypatch, FakeGraph(rows=rows))
     body = client.get("/api/graph/neighbors", params={"name": "四君子汤", "hop": 2}).json()
     ids = {n["name"] for n in body["nodes"]}
@@ -36,14 +40,28 @@ def test_neighbors_returns_nodes_and_links(client, monkeypatch):
     assert body["links"][0]["relation"] == "组成"
 
 
+def test_neighbors_mixed_status_assigns_per_endpoint(client, monkeypatch):
+    rows = [{"source": "四君子汤", "relation": "组成", "target": "人参",
+             "source_type": "方剂", "target_type": "中药",
+             "status": "已发布", "target_status": "候选"}]
+    _use(monkeypatch, FakeGraph(rows=rows))
+    body = client.get("/api/graph/neighbors", params={"name": "四君子汤"}).json()
+    statuses = {n["name"]: n["status"] for n in body["nodes"]}
+    assert statuses["四君子汤"] == "已发布"
+    assert statuses["人参"] == "候选"
+
+
 def test_candidates_lists_pending_only(client, monkeypatch):
     rows = [{"source": "归脾汤", "relation": "组成", "target": "远志",
              "source_type": "方剂", "target_type": "中药", "status": "候选",
              "source_doc": "内科讲义.md"}]
-    _use(monkeypatch, FakeGraph(rows=rows))
+    fake = FakeGraph(rows=rows)
+    _use(monkeypatch, fake)
     resp = client.get("/api/graph/candidates").json()
     assert resp["edges"][0]["target"] == "远志"
     assert resp["edges"][0]["source_doc"] == "内科讲义.md"
+    cypher, _ = fake.calls[0]
+    assert "r.status = '候选'" in cypher
 
 
 def test_approve_sets_published(client, monkeypatch):
@@ -68,3 +86,38 @@ def test_approve_node(client, monkeypatch):
 def test_entity_detail_404(client, monkeypatch):
     _use(monkeypatch, FakeGraph(rows=[]))
     assert client.get("/api/graph/entities/不存在").status_code == 404
+
+
+def test_reject_node_requires_name(client, monkeypatch):
+    fake = FakeGraph()
+    _use(monkeypatch, fake)
+    resp = client.post("/api/graph/candidates/reject", json={"kind": "node"})
+    assert resp.status_code == 422
+    assert fake.calls == []
+
+
+def test_reject_edge_requires_fields(client, monkeypatch):
+    fake = FakeGraph()
+    _use(monkeypatch, fake)
+    resp = client.post("/api/graph/candidates/reject",
+                       json={"kind": "edge", "source": "归脾汤"})
+    assert resp.status_code == 422
+    assert fake.calls == []
+
+
+def test_reject_node_blocked_by_published_edge(client, monkeypatch):
+    fake = FakeGraph(rows=[{"n": 1}])
+    _use(monkeypatch, fake)
+    resp = client.post("/api/graph/candidates/reject", json={"kind": "node", "name": "人参"})
+    assert resp.status_code == 409
+    assert len(fake.calls) == 1  # 仅引用检查，未执行删除
+
+
+def test_reject_node_success(client, monkeypatch):
+    fake = FakeGraph(rows=[{"n": 0}])
+    _use(monkeypatch, fake)
+    resp = client.post("/api/graph/candidates/reject", json={"kind": "node", "name": "远志"})
+    assert resp.status_code == 200
+    cypher, params = fake.calls[-1]
+    assert "DETACH DELETE" in cypher
+    assert params["name"] == "远志"
