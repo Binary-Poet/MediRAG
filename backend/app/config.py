@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = "medirag123"
-    mysql_dsn: str = "mysql+pymysql://medirag:medirag123@localhost:3306/medirag"
+    mysql_dsn: str = "mysql+pymysql://medirag:medirag123@localhost:3307/medirag"
 
     # ===== 业务库（阶段 4：文档元数据/状态机；测试用 sqlite 注入覆盖）=====
     database_url: str = ""

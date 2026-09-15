@@ -15,7 +15,7 @@ class Base(DeclarativeBase):
 
 
 def _make_engine(url: str):
-    kwargs = {"echo": False, "future": True}
+    kwargs = {"echo": False}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
     return create_engine(url, **kwargs)
