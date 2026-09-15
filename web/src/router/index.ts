@@ -24,8 +24,8 @@ const router = createRouter({
         {
           path: 'graph',
           name: 'graph',
-          component: () => import('../views/Placeholder.vue'),
-          meta: { title: '本草图谱', breadcrumb: '本草图谱', phase: '阶段 2/4' },
+          component: () => import('../views/graph/GraphExplore.vue'),
+          meta: { title: '本草图谱', breadcrumb: '本草图谱' },
         },
         {
           path: 'library',
