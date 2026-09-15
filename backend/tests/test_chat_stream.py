@@ -22,13 +22,13 @@ def _patch_agent(client, monkeypatch, *, safety="ok", answer=None, safety_messag
             {"step": "rerank", "evidence_n": 1, "confidence": 0.9, "status": "证据充分，正常生成"}],
     }
     fake_graph = MagicMock()
-    fake_graph.stream.return_value = [  # (node_name, update_dict) 对，与 stream_mode="updates" 一致
-        ("understand", {"rewritten_query": "四君子汤组成", "trace": [{"step": "understand"}]}),
-        ("retrieve", {"vector_hits": [], "graph_facts": final["graph_facts"], "trace": [{"step": "retrieve", "vector_n": 0, "graph_n": 1}]}),
-        ("fuse", {"evidence": final["evidence"], "confidence": 0.9,
-                   "trace": [{"step": "fuse", "candidate_n": 1}, {"step": "rerank", "evidence_n": 1, "confidence": 0.9, "status": "证据充分，正常生成"}]}),
-        ("safety", {"safety_flag": safety}),
-        ("context", {"prompt": "P"}),
+    fake_graph.stream.return_value = [  # 单键 dict：langgraph 1.x stream_mode="updates" 真实形状
+        {"understand": {"rewritten_query": "四君子汤组成", "trace": [{"step": "understand"}]}},
+        {"retrieve": {"vector_hits": [], "graph_facts": final["graph_facts"], "trace": [{"step": "retrieve", "vector_n": 0, "graph_n": 1}]}},
+        {"fuse": {"evidence": final["evidence"], "confidence": 0.9,
+                   "trace": [{"step": "fuse", "candidate_n": 1}, {"step": "rerank", "evidence_n": 1, "confidence": 0.9, "status": "证据充分，正常生成"}]}},
+        {"safety": {"safety_flag": safety}},
+        {"context": {"prompt": "P"}},
     ]
     monkeypatch.setattr(chatmod, "get_agent", lambda: fake_graph)
     monkeypatch.setattr(chatmod, "chat_completion_stream", lambda system, user, temperature=0.3: iter(["四君子汤由人参、白术、茯苓、炙甘草组成 [1]"]))

@@ -44,15 +44,19 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
     def gen():
         final = dict(initial)
         try:
-            for node_name, update in graph.stream(initial, stream_mode="updates"):
-                for key, val in update.items():
-                    if key == "trace":
-                        final["trace"] = final.get("trace", []) + val
-                    else:
-                        final[key] = val
-                if "trace" in update:
-                    for ev in update["trace"]:
-                        yield sse("step", ev)
+            # langgraph 1.x stream_mode="updates" 逐 chunk 产出 {node_name: update} 单键 dict；
+            # 元组 (node_name, update) 为 0.x 形状，兼容兜底。
+            for chunk in graph.stream(initial, stream_mode="updates"):
+                items = chunk.items() if isinstance(chunk, dict) else [chunk]
+                for node_name, update in items:
+                    for key, val in update.items():
+                        if key == "trace":
+                            final["trace"] = final.get("trace", []) + val
+                        else:
+                            final[key] = val
+                    if "trace" in update:
+                        for ev in update["trace"]:
+                            yield sse("step", ev)
         except RuntimeError as e:
             yield sse("error", {"detail": str(e)})
             return
