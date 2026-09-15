@@ -30,8 +30,8 @@ const router = createRouter({
         {
           path: 'library',
           name: 'library',
-          component: () => import('../views/Placeholder.vue'),
-          meta: { title: '典籍知识库', breadcrumb: '典籍知识库', phase: '阶段 4' },
+          component: () => import('../views/knowledge/Library.vue'),
+          meta: { title: '典籍知识库', breadcrumb: '典籍知识库' },
         },
         {
           path: 'overview',
