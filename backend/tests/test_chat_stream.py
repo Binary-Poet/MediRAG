@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock
 
 import app.api.chat as chatmod
-from app.agent.memory import get_history, upsert_message
 
 
 def _patch_agent(client, monkeypatch, *, safety="ok", answer=None, safety_message=""):
@@ -57,6 +56,33 @@ def test_stream_low_confidence_emits_safety_and_fallback_text(client, monkeypatc
     assert "知识库中未检索到可靠依据" in raw
 
 
+def test_stream_low_confidence_emits_no_token_event(client, monkeypatch):
+    # 低置信分支无 LLM 生成：只发 safety，不发 token（前端以框渲染兜底话术）
+    _patch_agent(client, monkeypatch, safety="low_confidence",
+                 safety_message="知识库中未检索到可靠依据。", answer="知识库中未检索到可靠依据。")
+    with client.stream("POST", "/api/chat/stream", json={"question": "今天天气"}) as resp:
+        raw = "".join(resp.iter_text())
+    assert "event: safety" in raw
+    assert "event: token" not in raw
+
+
+def test_stream_emergency_injects_emergency_system_prompt(client, monkeypatch):
+    # 急症分支：就医约束需注入 system prompt，保证回答开头出现加粗就医提示
+    _patch_agent(client, monkeypatch, safety="emergency",
+                 safety_message="您提到的情况可能属于急症，请立即就医或拨打 120。")
+    seen = {}
+
+    def _cap(system, user, temperature=0.3):
+        seen["system"] = system
+        yield "请立即就医"
+
+    monkeypatch.setattr(chatmod, "chat_completion_stream", _cap)
+    with client.stream("POST", "/api/chat/stream", json={"question": "我胸痛"}) as resp:
+        raw = "".join(resp.iter_text())
+    assert '"type": "emergency"' in raw
+    assert "120" in seen["system"]
+
+
 def test_stream_empty_question_rejected(client):
     resp = client.post("/api/chat/stream", json={"question": ""})
     assert resp.status_code == 422
@@ -75,3 +101,15 @@ def test_stream_generation_error_emits_error_event(client, monkeypatch):
         raw = "".join(resp.iter_text())
     assert "event: error" in raw
     assert "LLM 网络故障" in raw
+
+
+def test_stream_graph_error_emits_error_event(client, monkeypatch):
+    # 图阶段抛非 RuntimeError（如 ValueError）时仍收口为 error 事件（对齐 S4）
+    fake_graph = MagicMock()
+    fake_graph.stream.side_effect = ValueError("图执行失败")
+    monkeypatch.setattr(chatmod, "get_agent", lambda: fake_graph)
+    with client.stream("POST", "/api/chat/stream", json={"question": "四君子汤组成"}) as resp:
+        assert resp.status_code == 200
+        raw = "".join(resp.iter_text())
+    assert "event: error" in raw
+    assert "图执行失败" in raw

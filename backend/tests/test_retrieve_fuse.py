@@ -39,7 +39,7 @@ def test_retrieve_invokes_tools_per_plan(monkeypatch):
             calls.append(self._name)
             return {"fact": self._name}
 
-    rmod.TOOLS = {n: FakeTool(n) for n in ["vector_search", "keyword_search", "graph_search"]}
+    monkeypatch.setattr(rmod, "TOOLS", {n: FakeTool(n) for n in ["vector_search", "keyword_search", "graph_search"]})
     upd = rmod.retrieve(_state(intent="complex", entity_names=["四君子汤"], rewritten_query="四君子汤组成"))
     assert upd["plan"] == ["vector_search", "keyword_search", "graph_search"]
     assert calls == ["vector_search", "keyword_search", "graph_search"]
@@ -56,7 +56,7 @@ def test_retrieve_skips_graph_without_entities(monkeypatch):
             calls.append(self._name)
             return {"fact": self._name}
 
-    rmod.TOOLS = {n: FakeTool(n) for n in ["vector_search", "keyword_search", "graph_search"]}
+    monkeypatch.setattr(rmod, "TOOLS", {n: FakeTool(n) for n in ["vector_search", "keyword_search", "graph_search"]})
     rmod.retrieve(_state(intent="concept", entity_names=[], rewritten_query="风寒束表与风热犯表的区别"))
     assert "graph_search" not in calls        # 无实体 → 跳过图谱
     assert calls == ["vector_search", "keyword_search"]
@@ -76,6 +76,20 @@ def test_fuse_rrf_and_rerank(monkeypatch):
     assert upd["confidence"] == 0.9
     assert upd["low_confidence"] is False
     assert [e["step"] for e in upd["trace"]] == ["fuse", "rerank"]
+
+
+def test_fuse_graph_exemption_filters_low_score_evidence(monkeypatch):
+    monkeypatch.setattr(fmod, "rrf_fuse", lambda lists, k=60, weights=None: [
+        {"chunk_id": "a", "title": "低分噪声", "text": "噪声", "rrf_score": 0.1},
+    ])
+    monkeypatch.setattr(fmod, "rerank", lambda q, docs, top_n: [{"index": 0, "score": 0.12}])
+    monkeypatch.setattr(fmod, "get_settings", lambda: _Cfg())
+    st = _state(vector_hits=[{"chunk_id": "a"}],
+                graph_facts=[{"source": "四君子汤", "relation": "禁忌", "target": "证候不符不得使用"}])
+    upd = fmod.fuse(st)
+    assert upd["low_confidence"] is True
+    assert upd["evidence"] == []          # 低分噪声被剔除，图谱独立支撑
+    assert upd["confidence"] == 0.0
 
 
 def test_reflect_edge_triggers_once(monkeypatch):
@@ -111,7 +125,7 @@ def test_retrieve_reads_topk_from_settings(monkeypatch):
             calls_kwargs.append((self._name, dict(kwargs)))
             return {"fact": self._name}
 
-    rmod.TOOLS = {n: FakeTool(n) for n in ["vector_search", "keyword_search", "graph_search"]}
+    monkeypatch.setattr(rmod, "TOOLS", {n: FakeTool(n) for n in ["vector_search", "keyword_search", "graph_search"]})
     monkeypatch.setattr(rmod, "get_settings",
                         lambda: _Cfg(semantic_k=7, keyword_k=3))
     rmod.retrieve(_state(intent="concept", entity_names=[], rewritten_query="风寒束表 风热犯表"))

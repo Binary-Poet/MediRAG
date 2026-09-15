@@ -76,4 +76,5 @@ def test_full_graph_reflect_then_recover(monkeypatch):
     g = wmod.build_agent().compile()
     final = g.invoke(_state(question="四君子汤有什么禁忌？"))
     assert final["reflect_count"] == 1
+    assert final["graph_facts"]                 # 次轮检索确实命中图谱（证明 reflect 后补查真的发生）
     assert final["safety_flag"] == "ok"          # 图谱补充后放行

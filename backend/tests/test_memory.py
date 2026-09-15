@@ -20,3 +20,15 @@ def test_history_capped_at_8():
 
 def test_unknown_session_returns_empty():
     assert get_history("no-such-session") == []
+
+
+def test_sessions_evict_oldest_beyond_max(monkeypatch):
+    """会话数上界：超过 MAX_SESSIONS 时逐出最旧（dict 插入序）。"""
+    import app.agent.memory as memory
+    monkeypatch.setattr(memory, "MAX_SESSIONS", 3)
+    monkeypatch.setattr(memory, "_sessions", {})
+    for i in range(4):
+        memory.upsert_message(f"s{i}", "user", f"q{i}")
+    assert len(memory._sessions) == 3
+    assert "s0" not in memory._sessions   # 最旧被逐出
+    assert "s3" in memory._sessions
