@@ -241,3 +241,13 @@ RETURN DISTINCT startNode(r).name AS source, type(r) AS relation, endNode(r).nam
 | MySQL 3307 / Neo4j 7687 | 任务前后均在运行，未变更 |
 
 实测脚本与原始输出（本地留档，未提交）：`C:/tmp/accept_a.py|json`、`accept_b.py|json`、`accept_c.py|json`、`accept_d.json`、`accept_pdf.py|json`、`final_state.json`、`medirag_backend*.log`、`vite_dev.log`。
+
+---
+
+## 9. 范围收窄记录
+
+规格 P0-6「典籍知识库」登记的操作列为 **「详情 · 下载 · 重命名」** 三项；阶段 4 本阶段仅实现 **「删除」** 一项。原因与递延安排如下：
+
+1. **详情 / 下载 / 重命名**依赖规格 P2 属性（更完整的文档元数据与检索入口）与《合并改造方案》阶段 5 的页面还原方案，本阶段不实现，避免在库表与接口上先行固化契约。
+2. 三项操作按规格与合并方案**阶段 5 递延**，在阶段 5「逐屏还原」时补齐，届时与本阶段已落地的列表 / 上传 / 状态轮询 / 删除一并成为完整的知识库管理界面。
+3. 本阶段的验收口径（§5）不含上述三项，故不影响阶段 4 的通过判定。

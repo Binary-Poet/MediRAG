@@ -19,6 +19,10 @@ data/milvus/
 # 上传的原始文档（运行数据）
 data/uploads/
 
+# 阶段 3 本地验收留档（脚本与数据，不入库）
+backend/scripts/
+backend/stage3_graph_results.json
+
 # IDE / 系统
 .idea/
 .vscode/
