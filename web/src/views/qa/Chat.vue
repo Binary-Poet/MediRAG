@@ -30,7 +30,7 @@ const messages = ref<QA[]>([])
 const input = ref('')
 const loading = ref(false)
 const listRef = ref<HTMLElement>()
-const sessionId = crypto.randomUUID()
+const sessionId = (globalThis.crypto?.randomUUID?.() ?? `s-${Math.random().toString(36).slice(2)}`)
 const traceVisible = ref(false)
 const currentTrace = ref<StepEvent[]>([])
 
@@ -132,16 +132,21 @@ function onEnter(e: KeyboardEvent) {
       <div v-for="(m, i) in messages" :key="i" class="qa-item">
         <div class="q">{{ m.question }}</div>
         <el-card class="a" shadow="never">
-          <div class="answer-text">
+          <!-- 安全事件提示框（急症/低置信度兜底，橙底）——置于回答顶部：
+               急症话术/拒答提示优先；低置信时正文为空、仅显示本框 -->
+          <div v-if="m.safety && m.safety.type !== 'ok'" class="safety-box warn">
+            {{ m.safety.message }}
+          </div>
+
+          <!-- 正文：低置信（无生成内容）时不渲染占位，避免与框内话术重复 -->
+          <div
+            v-if="m.answer || m.safety?.type !== 'low_confidence'"
+            class="answer-text"
+          >
             {{ m.answer || '正在生成…' }}<span
               v-if="loading && i === messages.length - 1 && m.answer"
               class="cursor"
             />
-          </div>
-
-          <!-- 安全事件提示框（急症/低置信度兜底，橙底） -->
-          <div v-if="m.safety && m.safety.type !== 'ok'" class="safety-box warn">
-            {{ m.safety.message }}
           </div>
 
           <!-- 绿色安全提示框（有图谱事实时显示） -->
