@@ -80,10 +80,10 @@ def parse_document(data: bytes, ext: str) -> str:
             return _parse_xlsx(data)
         if ext in ("pptx", "ppt"):
             return _parse_pptx(data)
-        if ext in ("doc", "rtf"):
-            # 老格式二进制脆弱，尽力提取可见文本；失败由调用方落"失败"状态
-            text = _decode(data)
-            return text if text.isprintable() or "\n" in text else _decode(data)
+        if ext == "doc":
+            raise ParseError("老版 .doc 二进制格式不支持，请另存为 .docx 后上传")
+        if ext == "rtf":
+            return _decode(data)          # RTF 为文本标记格式，直接解码
         text = _decode(data)
         if ext == "json":
             try:

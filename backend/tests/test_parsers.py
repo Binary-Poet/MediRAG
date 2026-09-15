@@ -95,6 +95,11 @@ def test_unsupported_ext_raises():
         parse_document(b"x", "exe")
 
 
+def test_binary_doc_raises_parse_error():
+    with pytest.raises(ParseError):
+        parse_document(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1\x00\x01\x02", "doc")
+
+
 def test_supported_exts_cover_spec_list():
     spec = {"pdf", "doc", "docx", "rtf", "ppt", "pptx", "xls", "xlsx", "csv", "tsv",
             "txt", "md", "html", "json", "xml", "yaml", "log"}
