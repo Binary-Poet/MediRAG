@@ -51,3 +51,32 @@ def test_save_candidates_writes_candidate_status(monkeypatch):
     assert any("status='候选'" in c or "status = '候选'" in c for c, _ in calls)
     assert len(node_cyphers) >= 2 and len(edge_cyphers) == 1
     assert all(p.get("source_doc") in (None, "内科讲义.md") for _, p in calls if p)
+
+
+def test_save_candidates_preserves_published_on_match(monkeypatch):
+    from app.graph.extractor import save_candidates
+
+    calls = []
+
+    class FakeGraph:
+        def execute_write(self, cypher, **params):
+            calls.append(cypher)
+
+    save_candidates([{"source": "四君子汤", "relation": "组成", "target": "人参",
+                      "source_type": "方剂", "target_type": "中药"}],
+                    source_doc="x.md", graph=FakeGraph())
+    edge_cypher = next(c for c in calls if "MERGE (a)-[r:" in c)
+    assert "CASE WHEN r.status = '已发布' THEN '已发布'" in edge_cypher
+    assert "ELSE '候选'" in edge_cypher
+
+
+def test_extract_triples_drops_illegal_relation_and_type(monkeypatch):
+    import app.graph.extractor as emod
+
+    monkeypatch.setattr(emod, "chat_completion", lambda system, user, temperature=0.3: """
+[{"source":"A","relation":"治疗","target":"B","source_type":"方剂","target_type":"中药"},
+ {"source":"C","relation":"组成","target":"D","source_type":"病名","target_type":"中药"},
+ {"source":"E","relation":"组成","target":"F","source_type":"方剂","target_type":"中药"}]
+""")
+    out = emod.extract_triples("x")
+    assert len(out) == 1 and out[0]["source"] == "E"

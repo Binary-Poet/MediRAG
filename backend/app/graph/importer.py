@@ -35,7 +35,8 @@ def import_seed(graph=None, path: Path = SEED_PATH) -> dict:
     for e in edges:
         graph.execute_write(
             "MATCH (a {name: $s}), (b {name: $t}) "
-            "MERGE (a)-[r:`" + e["relation"].replace("`", "``") + "`]->(b) SET r.note = $note",
+            "MERGE (a)-[r:`" + e["relation"].replace("`", "``") + "`]->(b) "
+            "SET r.note = $note, r.status = '已发布'",
             s=id_to_name[e["source"]], t=id_to_name[e["target"]], note=e.get("note", ""),
         )
 

@@ -19,10 +19,10 @@ def extract_triples(text: str) -> list[dict]:
     try:
         prompt = PROMPT_PATH.read_text(encoding="utf-8").format(text=text[:2000])
         raw = chat_completion(system="你是中医药知识图谱抽取器。", user=prompt, temperature=0.0)
+        match = re.search(r"\[.*?\]", raw, re.DOTALL)
     except Exception:
         return []
 
-    match = re.search(r"\[.*\]", raw, re.DOTALL)
     if not match:
         return []
     try:
