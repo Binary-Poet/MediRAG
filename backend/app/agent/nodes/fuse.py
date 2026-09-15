@@ -17,6 +17,11 @@ def fuse(state: AgentState) -> dict:
     confidence = max((e["score"] for e in evidence), default=0.0)
     low_confidence = bool(evidence) and evidence[0]["score"] < s.evidence_min_score
 
+    # 图谱强证据豁免：低置信但图谱命中 → 剔除低分文献噪声（阶段 2 R8 语义）
+    if low_confidence and state.get("graph_facts"):
+        evidence = [e for e in evidence if e["score"] >= s.evidence_min_score]
+        confidence = max((e["score"] for e in evidence), default=0.0)
+
     trace = [
         {"step": "fuse", "candidate_n": len(fused), "method": "RRF"},
         {"step": "rerank", "evidence_n": len(evidence), "confidence": round(confidence, 4),

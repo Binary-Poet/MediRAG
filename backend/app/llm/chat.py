@@ -38,7 +38,10 @@ def chat_completion(system: str, user: str, temperature: float = 0.3) -> str:
         },
         timeout=120,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as e:
+        raise RuntimeError(f"Chat 服务调用失败：{e}") from e
     return resp.json()["choices"][0]["message"]["content"]
 
 
@@ -59,7 +62,10 @@ def chat_completion_stream(system: str, user: str, temperature: float = 0.3):
         },
         timeout=120,
     ) as resp:
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPError as e:
+            raise RuntimeError(f"Chat 服务调用失败：{e}") from e
         for line in resp.iter_lines():
             if not line or not line.startswith("data:"):
                 continue

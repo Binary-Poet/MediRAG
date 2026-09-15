@@ -57,7 +57,7 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
                     if "trace" in update:
                         for ev in update["trace"]:
                             yield sse("step", ev)
-        except RuntimeError as e:
+        except Exception as e:
             yield sse("error", {"detail": str(e)})
             return
 
@@ -65,16 +65,16 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
         try:
             if final["safety_flag"] == "emergency":
                 yield sse("safety", {"type": "emergency", "message": final["safety_message"]})
+                emg_system = "你是中医药知识助手。用户描述了可能的急症情况，请务必在回答开头用加粗文字明确提示立即就医或拨打 120，再提供知识性说明。"
                 collected = []
-                for chunk in chat_completion_stream(system="你是中医药知识助手。", user=final["prompt"], temperature=0.3):
+                for chunk in chat_completion_stream(system=emg_system, user=final["prompt"], temperature=0.3):
                     collected.append(chunk)
                     yield sse("token", {"text": chunk})
                 final["answer"] = "".join(collected)
             elif final["safety_flag"] == "low_confidence":
-                # 正常流：safety 节点已产出 safety_message/answer；兜底以防只置了 flag
+                # 低置信分支无 LLM 生成：只发 safety 事件，前端以框渲染兜底话术
                 msg = final["safety_message"] or final["answer"] or LOW_CONFIDENCE_MESSAGE
                 yield sse("safety", {"type": "low_confidence", "message": msg})
-                yield sse("token", {"text": final["answer"] or msg})
             else:
                 collected = []
                 for chunk in chat_completion_stream(system="你是中医药知识助手「本草智问」。", user=final["prompt"], temperature=0.3):

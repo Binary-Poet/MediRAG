@@ -3,6 +3,7 @@ import uuid
 
 _sessions: dict[str, list[dict]] = {}
 _HISTORY_CAP = 8
+MAX_SESSIONS = 1000
 
 
 def new_session() -> str:
@@ -16,6 +17,8 @@ def get_history(session_id: str) -> list[dict]:
 
 
 def upsert_message(session_id: str, role: str, content: str) -> list[dict]:
+    if session_id not in _sessions and len(_sessions) >= MAX_SESSIONS:
+        _sessions.pop(next(iter(_sessions)))  # 逐出最旧（dict 插入序）
     msgs = _sessions.setdefault(session_id, [])
     msgs.append({"role": role, "content": content})
     if len(msgs) > _HISTORY_CAP:

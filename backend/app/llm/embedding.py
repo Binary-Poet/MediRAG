@@ -15,7 +15,10 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
         json={"model": s.embed_model, "input": texts},
         timeout=60,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as e:
+        raise RuntimeError(f"Embedding 服务调用失败：{e}") from e
     data = resp.json()["data"]
     # 按 index 排序，保证与输入顺序一致
     return [item["embedding"] for item in sorted(data, key=lambda d: d["index"])]
