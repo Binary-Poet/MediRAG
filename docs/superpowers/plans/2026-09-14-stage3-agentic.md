@@ -86,7 +86,8 @@ def test_agent_state_has_required_fields():
     assert AgentState.__annotations__["plan"] is list
     assert AgentState.__annotations__["reflect_count"] is int
     assert AgentState.__annotations__["safety_flag"] is str
-    assert AgentState.__annotations__["trace"] is list
+    from typing import get_origin
+    assert get_origin(AgentState.__annotations__["trace"]) is list      # Annotated[list, add]
 
 
 # test_emergency.py
@@ -117,7 +118,8 @@ Expected: FAIL（`ModuleNotFoundError: app.agent.state` / `app.safety.emergency`
 
 ```python
 """AgentState：LangGraph 状态机共享状态（合并方案 4.2，字段与 SSE trace 对应）。"""
-from typing import TypedDict
+from operator import add
+from typing import Annotated, TypedDict
 
 
 class AgentState(TypedDict):
@@ -141,7 +143,7 @@ class AgentState(TypedDict):
     safety_message: str               # 急救提示或拒答话术（safety 节点产出）
     prompt: str                       # 组装好的最终生成 Prompt（供宿主流式生成）
     answer: str                       # 兜底固定话术（非流式）或最终完整回答（流式完成后回填供记忆）
-    trace: list                       # 事件化 trace：[{"step": "understand", ...}, ...]
+    trace: Annotated[list, add]       # SSE step 事件流：节点只返回本次新增事件，langgraph 自动累计
 ```
 
 `backend/app/safety/emergency.py`：
@@ -487,7 +489,7 @@ def understand(state: AgentState) -> dict:
         "entities": entities,
         "entity_names": entity_names,
         "intent": parsed["intent"],
-        "trace": state.get("trace", []) + [trace_evt],
+        "trace": [trace_evt],
     }
 
 
@@ -688,7 +690,7 @@ def retrieve(state: AgentState) -> dict:
         "vector_hits": vector_hits,
         "keyword_hits": keyword_hits,
         "graph_facts": graph_facts,
-        "trace": state.get("trace", []) + [trace_evt],
+        "trace": [trace_evt],
     }
 ```
 
@@ -714,7 +716,7 @@ def fuse(state: AgentState) -> dict:
     confidence = max((e["score"] for e in evidence), default=0.0)
     low_confidence = bool(evidence) and evidence[0]["score"] < s.evidence_min_score
 
-    trace = state.get("trace", []) + [
+    trace = [
         {"step": "fuse", "candidate_n": len(fused), "method": "RRF"},
         {"step": "rerank", "evidence_n": len(evidence), "confidence": round(confidence, 4),
          "status": "证据充分，正常生成" if not low_confidence else "知识库未匹配"},
@@ -801,18 +803,16 @@ def test_build_agent_has_expected_nodes():
 def test_workflow_routes_chitchat_around_retrieval(monkeypatch):
     # 用真实图 + 全节点 monkeypatch，验证 chitchat 跳过 retrieve 且得到兜底答案
     import app.agent.workflow as wmod
-    monkeypatch.setattr(wmod, "understand", lambda state: dict(state, intent="chitchat",
-        rewritten_query=state["question"], entity_names=[], trace=state["trace"] + [{"step": "understand"}]))
-    monkeypatch.setattr(wmod, "safety", lambda state: dict(state, safety_flag="low_confidence",
-        safety_message="知识库中未检索到可靠依据。", answer="知识库中未检索到可靠依据。"))
-    monkeypatch.setattr(wmod, "context", lambda state: dict(state, prompt="EMPTY"))
+    monkeypatch.setattr(wmod, "understand", lambda state: {"intent": "chitchat",
+        "rewritten_query": state["question"], "entity_names": [], "trace": [{"step": "understand"}]})
+    monkeypatch.setattr(wmod, "safety", lambda state: {"safety_flag": "low_confidence",
+        "safety_message": "知识库中未检索到可靠依据。", "answer": "知识库中未检索到可靠依据。"})
+    monkeypatch.setattr(wmod, "context", lambda state: {"prompt": "EMPTY"})
     g = wmod.build_agent().compile()
     final = g.invoke(_state(intent="chitchat"))
     assert final["safety_flag"] == "low_confidence"
     # 验证 retrieve 从未被调用（wmod 没有 monkeypatch retrieve，但 chitchat 路由不经过它）
 ```
-
-> 注：第三个测试用 `dict(state, **updates)` 合并更新（因为 monkeypatch 的节点是简单 lambda，需返回完整 state）。workflow.py 应 import 节点函数名（供测试 monkeypatch）而非 `from ... import understand as _understand` 隐藏。
 
 - [ ] **Step 2: 运行确认失败**
 
@@ -853,7 +853,7 @@ def reflect(state: AgentState) -> dict:
                  "rewritten": new_query}
     return {"rewritten_query": new_query,
             "reflect_count": state["reflect_count"] + 1,
-            "trace": state.get("trace", []) + [trace_evt]}
+            "trace": [trace_evt]}
 
 
 def _history_block(history: list) -> str:
@@ -1097,9 +1097,10 @@ def _patch_agent(client, monkeypatch, *, safety="ok", answer=None, safety_messag
     }
     fake_graph = MagicMock()
     fake_graph.stream.return_value = [  # (node_name, update_dict) 对，与 stream_mode="updates" 一致
-        ("understand", {"rewritten_query": "四君子汤组成"}),
-        ("retrieve", {"vector_hits": [], "graph_facts": final["graph_facts"]}),
-        ("fuse", {"evidence": final["evidence"], "confidence": 0.9}),
+        ("understand", {"rewritten_query": "四君子汤组成", "trace": [{"step": "understand"}]}),
+        ("retrieve", {"vector_hits": [], "graph_facts": final["graph_facts"], "trace": [{"step": "retrieve", "vector_n": 0, "graph_n": 1}]}),
+        ("fuse", {"evidence": final["evidence"], "confidence": 0.9,
+                   "trace": [{"step": "fuse", "candidate_n": 1}, {"step": "rerank", "evidence_n": 1, "confidence": 0.9, "status": "证据充分，正常生成"}]}),
         ("safety", {"safety_flag": safety}),
         ("context", {"prompt": "P"}),
     ]
@@ -1248,11 +1249,6 @@ def _initial_state(body: StreamBody, session_id: str) -> dict:
     }
 
 
-def _extract_step(state_part: dict) -> dict | None:
-    trace = state_part.get("trace") or []
-    return trace[-1] if trace else None
-
-
 @router.post("/chat/stream")
 def chat_stream(body: StreamBody) -> StreamingResponse:
     session_id = body.session_id or new_session()
@@ -1264,7 +1260,10 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
         try:
             for node_name, update in graph.stream(initial, stream_mode="updates"):
                 for key, val in update.items():
-                    final[key] = val
+                    if key == "trace":
+                        final["trace"] = final.get("trace", []) + val
+                    else:
+                        final[key] = val
                 if "trace" in update:
                     for ev in update["trace"]:
                         yield sse("step", ev)
@@ -1275,10 +1274,11 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
         # 生成阶段
         if final["safety_flag"] == "emergency":
             yield sse("safety", {"type": "emergency", "message": final["safety_message"]})
+            collected = []
             for chunk in chat_completion_stream(system="你是中医药知识助手。", user=final["prompt"], temperature=0.3):
+                collected.append(chunk)
                 yield sse("token", {"text": chunk})
-            final["answer"] = ""
-            # emergency：答案顶部插入就医话术（前端已由 safety 事件渲染，此处仅保证 references）
+            final["answer"] = "".join(collected)
         elif final["safety_flag"] == "low_confidence":
             yield sse("safety", {"type": "low_confidence", "message": final["safety_message"]})
             yield sse("token", {"text": final["answer"]})
@@ -1363,19 +1363,17 @@ def test_safety_low_confidence_when_no_evidence_and_no_graph():
 def test_full_graph_reflect_then_recover(monkeypatch):
     # demo case：首轮检索不足 → reflect 改写 → 第二轮补查成功 → ok
     import app.agent.workflow as wmod
-    from app.agent.nodes import fuse as fusemod
     # 使首轮 fuse 判定 low_confidence，第二轮正常
     rounds = {"n": 0}
-    orig_fuse = wmod.fuse
     monkeypatch.setattr(wmod, "fuse", lambda state: _round_fuse(state, rounds))
-    monkeypatch.setattr(wmod, "understand", lambda state: dict(state, intent="relation",
-        entity_names=["四君子汤"], rewritten_query="四君子汤 禁忌", trace=state["trace"] + [{"step": "understand"}]))
-    monkeypatch.setattr(wmod, "retrieve", lambda state: dict(state, vector_hits=[],
-        graph_facts=[{"source": "四君子汤", "relation": "禁忌", "target": "对方剂成分过敏者禁用"}],
-        trace=state["trace"] + [{"step": "retrieve"}]))
-    monkeypatch.setattr(wmod, "reflect", lambda state: dict(state, reflect_count=state["reflect_count"] + 1,
-        rewritten_query="四君子汤 使用注意", trace=state["trace"] + [{"step": "reflect"}]))
-    monkeypatch.setattr(wmod, "context", lambda state: dict(state, prompt="P"))
+    monkeypatch.setattr(wmod, "understand", lambda state: {"intent": "relation",
+        "entity_names": ["四君子汤"], "rewritten_query": "四君子汤 禁忌", "trace": [{"step": "understand"}]})
+    monkeypatch.setattr(wmod, "retrieve", lambda state: {"vector_hits": [],
+        "graph_facts": [{"source": "四君子汤", "relation": "禁忌", "target": "对方剂成分过敏者禁用"}],
+        "trace": [{"step": "retrieve"}]})
+    monkeypatch.setattr(wmod, "reflect", lambda state: {"reflect_count": state["reflect_count"] + 1,
+        "rewritten_query": "四君子汤 使用注意", "trace": [{"step": "reflect"}]})
+    monkeypatch.setattr(wmod, "context", lambda state: {"prompt": "P"})
 
     g = wmod.build_agent().compile()
     final = g.invoke(_state(question="四君子汤有什么禁忌？"))
@@ -1387,10 +1385,10 @@ def _round_fuse(state, rounds):
     rounds["n"] += 1
     if rounds["n"] == 1:
         upd = {"evidence": [], "confidence": 0.0, "low_confidence": True,
-               "trace": state["trace"] + [{"step": "rerank", "status": "知识库未匹配"}]}
+               "trace": [{"step": "rerank", "status": "知识库未匹配"}]}
     else:
         upd = {"evidence": [{"chunk_id": "x", "score": 0.8}], "confidence": 0.8, "low_confidence": False,
-               "trace": state["trace"] + [{"step": "rerank", "status": "证据充分，正常生成"}]}
+               "trace": [{"step": "rerank", "status": "证据充分，正常生成"}]}
     return {**state, **upd}
 ```
 
