@@ -20,6 +20,11 @@ class GraphClient:
         with self._driver.session() as session:
             session.run(cypher, **params).consume()
 
+    def run_read(self, cypher: str, **params) -> list[dict]:
+        """只读查询，返回行列表（业务 API 用，避免外部访问私有驱动）。"""
+        with self._driver.session() as session:
+            return session.run(cypher, **params).data()
+
     def all_entities(self) -> list[dict]:
         """全部已发布节点，供实体识别构建词表。"""
         cypher = """
