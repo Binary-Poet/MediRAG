@@ -39,5 +39,6 @@ export interface StreamHandlers {
   onToken: (text: string) => void
   onReferences: (refs: Reference[], graphFacts: GraphFact[]) => void
   onSafety: (type: string, message: string) => void
+  onError?: (detail: string) => void
   onDone: (metrics: Record<string, number>) => void
 }

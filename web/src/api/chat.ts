@@ -44,12 +44,18 @@ function parseSseFrame(frame: string): { event: string; data: string } | null {
 }
 
 function dispatch(evt: { event: string; data: string }, h: StreamHandlers) {
-  const data = JSON.parse(evt.data || 'null')
+  let data: any // SSE data 为非定形 JSON，各 case 自行取字段
+  try {
+    data = JSON.parse(evt.data || 'null')
+  } catch {
+    return // 坏帧跳过，不中断整个流
+  }
   switch (evt.event) {
     case 'step': h.onStep(data); break
     case 'token': h.onToken(data.text ?? ''); break
     case 'references': h.onReferences(data.docs ?? [], data.graph_facts ?? []); break
     case 'safety': h.onSafety(data.type, data.message ?? ''); break
+    case 'error': h.onError?.(String(data.detail ?? '未知错误')); break
     case 'done': h.onDone(data.metrics ?? {}); break
     default: break
   }

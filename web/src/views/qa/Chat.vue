@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 阶段 3 回答态：SSE 打字机（token 流式）+ 空态 5 常用问题卡片 + 溯源弹窗随 step 事件逐步点亮
 // 规格 P0-2 空态 / P0-3 回答态 / P0-4 溯源弹窗
-import { nextTick, ref } from 'vue'
+import { nextTick, reactive, ref } from 'vue'
 import { streamChat } from '../../api/chat'
 import { theme } from '../../styles/theme'
 import type { GraphFact, Reference, StepEvent } from '../../types/chat'
@@ -44,7 +44,9 @@ async function send(q?: string) {
   if (!question || loading.value) return
   input.value = ''
   loading.value = true
-  const item: QA = { question, answer: '', references: [], graphFacts: [], safety: null, trace: [] }
+  // reactive：流式回调闭包直接 mutate 代理对象才能触发视图更新
+  //（普通对象 push 进 messages 后，闭包持原始引用 mutate 不触发任何 effect）
+  const item = reactive<QA>({ question, answer: '', references: [], graphFacts: [], safety: null, trace: [] })
   messages.value.push(item)
   currentTrace.value = []
   traceVisible.value = true
@@ -73,10 +75,14 @@ async function send(q?: string) {
       onSafety: (type, message) => {
         item.safety = { type, message }
       },
+      onError: (detail) => {
+        // 后端 error 事件：保留已流式内容，仅在尚无输出时给失败话术
+        if (!item.answer) item.answer = `请求失败：${detail}`
+      },
       onDone: () => {},
     }, sessionId)
   } catch (e) {
-    item.answer = `请求失败：${(e as Error).message}`
+    item.answer ||= `请求失败：${(e as Error).message}`
   } finally {
     loading.value = false
     await scrollToBottom()
@@ -86,6 +92,15 @@ async function send(q?: string) {
 function openTrace(t: StepEvent[]) {
   currentTrace.value = t
   traceVisible.value = true
+}
+
+/** Enter 发送 / Shift+Enter 换行；IME 组合中（isComposing 或 keyCode 229）不触发 */
+function onEnter(e: KeyboardEvent) {
+  if (e.isComposing || e.keyCode === 229) return
+  if (!e.shiftKey) {
+    e.preventDefault()
+    send()
+  }
 }
 </script>
 
@@ -170,7 +185,7 @@ function openTrace(t: StepEvent[]) {
         resize="none"
         placeholder="输入中医药知识问题，按 Enter 发送 (Shift+Enter 换行)"
         :disabled="loading"
-        @keydown.enter.exact.prevent="send()"
+        @keydown.enter="onEnter"
       />
       <el-button type="primary" :loading="loading" @click="send()">发送</el-button>
     </div>
