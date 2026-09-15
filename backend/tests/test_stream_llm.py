@@ -1,6 +1,4 @@
-import json
 import httpx
-import pytest
 
 import app.llm.chat as cmod
 from app.llm.chat import chat_completion_stream

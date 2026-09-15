@@ -1,7 +1,7 @@
 """SSE 流式问答接口（合并方案 4.3 事件协议）。"""
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -57,25 +57,29 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
             yield sse("error", {"detail": str(e)})
             return
 
-        # 生成阶段
-        if final["safety_flag"] == "emergency":
-            yield sse("safety", {"type": "emergency", "message": final["safety_message"]})
-            collected = []
-            for chunk in chat_completion_stream(system="你是中医药知识助手。", user=final["prompt"], temperature=0.3):
-                collected.append(chunk)
-                yield sse("token", {"text": chunk})
-            final["answer"] = "".join(collected)
-        elif final["safety_flag"] == "low_confidence":
-            # 正常流：safety 节点已产出 safety_message/answer；兜底以防只置了 flag
-            msg = final["safety_message"] or final["answer"] or LOW_CONFIDENCE_MESSAGE
-            yield sse("safety", {"type": "low_confidence", "message": msg})
-            yield sse("token", {"text": final["answer"] or msg})
-        else:
-            collected = []
-            for chunk in chat_completion_stream(system="你是中医药知识助手「本草智问」。", user=final["prompt"], temperature=0.3):
-                collected.append(chunk)
-                yield sse("token", {"text": chunk})
-            final["answer"] = "".join(collected)
+        # 生成阶段（异常收口：LLM/网络错误 → 显式 error 事件，跳过 references/done）
+        try:
+            if final["safety_flag"] == "emergency":
+                yield sse("safety", {"type": "emergency", "message": final["safety_message"]})
+                collected = []
+                for chunk in chat_completion_stream(system="你是中医药知识助手。", user=final["prompt"], temperature=0.3):
+                    collected.append(chunk)
+                    yield sse("token", {"text": chunk})
+                final["answer"] = "".join(collected)
+            elif final["safety_flag"] == "low_confidence":
+                # 正常流：safety 节点已产出 safety_message/answer；兜底以防只置了 flag
+                msg = final["safety_message"] or final["answer"] or LOW_CONFIDENCE_MESSAGE
+                yield sse("safety", {"type": "low_confidence", "message": msg})
+                yield sse("token", {"text": final["answer"] or msg})
+            else:
+                collected = []
+                for chunk in chat_completion_stream(system="你是中医药知识助手「本草智问」。", user=final["prompt"], temperature=0.3):
+                    collected.append(chunk)
+                    yield sse("token", {"text": chunk})
+                final["answer"] = "".join(collected)
+        except Exception as e:  # 生成阶段异常收口：LLM/网络错误 → 显式 error 事件
+            yield sse("error", {"detail": f"生成阶段失败：{e}"})
+            return
 
         refs = [
             {"chunk_id": c["chunk_id"], "title": c["title"], "doc_name": c["doc_name"],

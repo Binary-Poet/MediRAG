@@ -60,3 +60,18 @@ def test_stream_low_confidence_emits_safety_and_fallback_text(client, monkeypatc
 def test_stream_empty_question_rejected(client):
     resp = client.post("/api/chat/stream", json={"question": ""})
     assert resp.status_code == 422
+
+
+def test_stream_generation_error_emits_error_event(client, monkeypatch):
+    _patch_agent(client, monkeypatch)
+
+    def _boom(system, user, temperature=0.3):
+        raise RuntimeError("LLM 网络故障")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(chatmod, "chat_completion_stream", _boom)
+    with client.stream("POST", "/api/chat/stream", json={"question": "四君子汤组成"}) as resp:
+        assert resp.status_code == 200
+        raw = "".join(resp.iter_text())
+    assert "event: error" in raw
+    assert "LLM 网络故障" in raw
