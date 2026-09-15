@@ -1,25 +1,53 @@
 <script setup lang="ts">
-// 检索溯源弹窗 —— 规格 P0-4。阶段 2：响应一次返回后渲染全部步骤；阶段 3 换 SSE 逐步点亮。
+// 检索溯源弹窗 —— 规格 P0-4。阶段 3：由 SSE step 事件数组驱动，随事件逐步点亮。
+// activeStep 映射：understand→1、retrieve→2、fuse/reflect→3、rerank→4、generate（生成中）→5。
+import { computed } from 'vue'
 import { theme } from '../../../styles/theme'
-import type { Trace } from '../../../types/chat'
+import type { StepEvent } from '../../../types/chat'
 
-defineProps<{
+const props = defineProps<{
   visible: boolean
-  trace: Trace | null
+  steps: StepEvent[]
 }>()
 
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>()
 
 const steps = [
-  { key: 1, label: '问句理解', desc: '实体识别' },
-  { key: 2, label: '多路检索', desc: '向量 / 图谱 / 关键词' },
-  { key: 3, label: '证据融合', desc: 'RRF 互惠排名融合' },
-  { key: 4, label: '相关性排序', desc: 'BGE-reranker 精排' },
-  { key: 5, label: '生成回答', desc: 'SSE 流式输出' },
+  { key: 1, icon: '📝', label: '问句理解', desc: '实体识别' },
+  { key: 2, icon: '🔍', label: '多路检索', desc: '向量 / 图谱 / 关键词' },
+  { key: 3, icon: '🔄', label: '证据融合', desc: 'RRF 互惠排名融合' },
+  { key: 4, icon: '📊', label: '相关性排序', desc: 'BGE-reranker 精排' },
+  { key: 5, icon: '✓', label: '生成回答', desc: 'SSE 流式输出' },
 ]
 
-// 阶段 2 数据完整返回：全部步骤视为已完成（阶段 3 按 event 推进）
-const doneKeys = [1, 2, 3, 4, 5]
+const stepIndex: Record<string, number> = {
+  understand: 1,
+  retrieve: 2,
+  reflect: 3,
+  fuse: 3,
+  rerank: 4,
+  generate: 5,
+  done: 5,
+}
+
+/** 当前点亮步：取已到达 step 的最大序号 */
+const activeStep = computed(() =>
+  props.steps.reduce((acc, ev) => Math.max(acc, stepIndex[ev.step] ?? 0), 0),
+)
+
+/** 取某 step 的最后一个事件（多轮时以最新为准） */
+function ev(step: string): StepEvent | undefined {
+  for (let i = props.steps.length - 1; i >= 0; i--) {
+    if (props.steps[i].step === step) return props.steps[i]
+  }
+  return undefined
+}
+
+const understand = computed(() => ev('understand'))
+const retrieve = computed(() => ev('retrieve'))
+const fuse = computed(() => ev('fuse'))
+const rerank = computed(() => ev('rerank'))
+const reflect = computed(() => ev('reflect'))
 </script>
 
 <template>
@@ -29,74 +57,76 @@ const doneKeys = [1, 2, 3, 4, 5]
     width="640px"
     @update:model-value="(v: boolean) => emit('update:visible', v)"
   >
-    <!-- 5 步流程条 -->
+    <!-- 5 步流程条：已完成=绿，当前=橙（M-10），待执行=灰 -->
     <div class="trace-steps">
       <div
         v-for="s in steps"
         :key="s.key"
         class="step"
-        :class="{ done: doneKeys.includes(s.key) }"
+        :class="{ active: s.key === activeStep, done: s.key < activeStep }"
       >
-        <div class="step-dot">{{ s.key }}</div>
+        <div class="step-dot">{{ s.icon }}</div>
         <div class="step-label">{{ s.label }}</div>
       </div>
     </div>
 
-    <template v-if="trace">
-      <!-- 步骤 1：原始 vs 改写 -->
-      <div class="section">
-        <div class="section-title">① 问句理解</div>
-        <div class="pair">
-          <div class="pair-item">
-            <div class="pair-label">原始问题</div>
-            <div class="pair-text">{{ trace.understand.raw }}</div>
-          </div>
-          <div class="pair-item">
-            <div class="pair-label">检索查询（改写）</div>
-            <div class="pair-text">{{ trace.understand.rewritten }}</div>
-          </div>
+    <!-- 步骤 1：原始 vs 改写 -->
+    <div v-if="understand" class="section">
+      <div class="section-title">① 问句理解</div>
+      <div class="pair">
+        <div class="pair-item">
+          <div class="pair-label">原始问题</div>
+          <div class="pair-text">{{ understand.raw }}</div>
         </div>
-        <div class="entity-line">
-          识别实体：
-          <el-tag v-for="e in trace.understand.entities" :key="e" size="small" class="tag">{{ e }}</el-tag>
-          <span v-if="!trace.understand.entities.length" class="muted">（未识别）</span>
+        <div class="pair-item">
+          <div class="pair-label">检索查询（改写）</div>
+          <div class="pair-text">{{ understand.rewritten }}</div>
         </div>
       </div>
+      <div class="entity-line">
+        识别实体：
+        <el-tag v-for="e in understand.entities" :key="e" size="small" class="tag">{{ e }}</el-tag>
+        <span v-if="!understand.entities?.length" class="muted">（未识别）</span>
+      </div>
+    </div>
 
-      <!-- 步骤 2-3：4 数字卡 -->
-      <div class="section">
-        <div class="section-title">② 多路检索 · ③ 证据融合</div>
-        <div class="num-cards">
-          <div class="num-card">
-            <div class="num">{{ trace.retrieve.vector_n }}</div>
-            <div class="num-label">向量检索（语义）</div>
-          </div>
-          <div class="num-card">
-            <div class="num">{{ trace.retrieve.graph_n }}</div>
-            <div class="num-label">中医药图谱（{{ trace.retrieve.entity_n }} 命中实体）</div>
-          </div>
-          <div class="num-card">
-            <div class="num">{{ trace.retrieve.keyword_n }}</div>
-            <div class="num-label">关键词检索（BM25）</div>
-          </div>
-          <div class="num-card">
-            <div class="num">{{ trace.fuse.candidate_n }}</div>
-            <div class="num-label">证据融合（{{ trace.fuse.method }}）</div>
-          </div>
+    <!-- 步骤 2-3：4 数字卡 + 自反思提示 -->
+    <div v-if="retrieve || fuse" class="section">
+      <div class="section-title">② 多路检索 · ③ 证据融合</div>
+      <div class="num-cards">
+        <div class="num-card">
+          <div class="num">{{ retrieve?.vector_n ?? '—' }}</div>
+          <div class="num-label">向量检索（语义）</div>
+        </div>
+        <div class="num-card">
+          <div class="num">{{ retrieve?.graph_n ?? '—' }}</div>
+          <div class="num-label">中医药图谱（{{ retrieve?.entity_n ?? 0 }} 命中实体）</div>
+        </div>
+        <div class="num-card">
+          <div class="num">{{ retrieve?.keyword_n ?? '—' }}</div>
+          <div class="num-label">关键词检索（BM25）</div>
+        </div>
+        <div class="num-card">
+          <div class="num">{{ fuse?.candidate_n ?? '—' }}</div>
+          <div class="num-label">证据融合（{{ fuse?.method ?? '—' }}）</div>
         </div>
       </div>
+      <!-- 自反思触发时显示一轮「重查」提示（合并方案扩充项） -->
+      <div v-if="reflect" class="reflect-line">
+        自反思（第 {{ reflect.round ?? 1 }} 轮）：{{ reflect.reason || '检索质量不足' }}，触发重新检索
+      </div>
+    </div>
 
-      <!-- 步骤 4：最终证据 + 状态徽章 -->
-      <div class="section">
-        <div class="section-title">④ 相关性精排</div>
-        <div class="final-line">
-          <span class="evidence-n">{{ trace.rerank.evidence_n }} 条证据进入回答上下文</span>
-          <span class="badge" :class="trace.rerank.status === '知识库未匹配' ? 'empty' : 'ok'">
-            {{ trace.rerank.status }}
-          </span>
-        </div>
+    <!-- 步骤 4：最终证据 + 状态徽章 -->
+    <div v-if="rerank" class="section">
+      <div class="section-title">④ 相关性精排</div>
+      <div class="final-line">
+        <span class="evidence-n">{{ rerank.evidence_n }} 条证据进入回答上下文</span>
+        <span class="badge" :class="rerank.status === '知识库未匹配' ? 'empty' : 'ok'">
+          {{ rerank.status }}
+        </span>
       </div>
-    </template>
+    </div>
   </el-dialog>
 </template>
 
@@ -112,7 +142,8 @@ const doneKeys = [1, 2, 3, 4, 5]
   text-align: center;
   opacity: 0.45;
 }
-.step.done {
+.step.done,
+.step.active {
   opacity: 1;
 }
 .step-dot {
@@ -120,17 +151,17 @@ const doneKeys = [1, 2, 3, 4, 5]
   height: 26px;
   border-radius: 50%;
   background: v-bind(theme.borderColor);
-  color: v-bind(theme.textColorSecondary);
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 4px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
 }
 .step.done .step-dot {
-  background: v-bind(theme.colorPrimary);
-  color: v-bind(theme.cardBg);
+  background: v-bind(theme.colorSuccess);
+}
+.step.active .step-dot {
+  background: v-bind(theme.colorWarning);
 }
 .step-label {
   font-size: 12px;
@@ -207,6 +238,14 @@ const doneKeys = [1, 2, 3, 4, 5]
   color: v-bind(theme.textColorSecondary);
   margin-top: 4px;
   line-height: 1.4;
+}
+.reflect-line {
+  margin-top: 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: v-bind(theme.warningBg);
+  color: v-bind(theme.warningText);
 }
 .final-line {
   display: flex;

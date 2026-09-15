@@ -1,22 +1,56 @@
-/** API 封装：阶段 1 问答接口（阶段 3 换 SSE 流式） */
-import type { GraphFact, Reference, Trace } from '../types/chat'
+/** SSE 流式问答（fetch ReadableStream 解析，EventSource 不支持 POST） */
+import type { StreamHandlers } from '../types/chat'
 
-export interface AskResponse {
-  answer: string
-  references: Reference[]
-  graph_facts: GraphFact[]
-  trace: Trace
-}
-
-export async function askQuestion(question: string): Promise<AskResponse> {
-  const resp = await fetch('/api/chat/ask', {
+export async function streamChat(
+  question: string,
+  handlers: StreamHandlers,
+  sessionId?: string,
+): Promise<void> {
+  const resp = await fetch('/api/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, session_id: sessionId }),
   })
-  if (!resp.ok) {
+  if (!resp.ok || !resp.body) {
     const detail = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }))
     throw new Error(detail.detail ?? `请求失败（${resp.status}）`)
   }
-  return resp.json()
+  const reader = resp.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    const frames = buf.split('\n\n')
+    buf = frames.pop() ?? ''
+    for (const frame of frames) {
+      const evt = parseSseFrame(frame)
+      if (!evt) continue
+      dispatch(evt, handlers)
+    }
+  }
+}
+
+function parseSseFrame(frame: string): { event: string; data: string } | null {
+  let event = 'message'
+  const dataLines: string[] = []
+  for (const line of frame.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim()
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
+  }
+  if (!dataLines.length) return null
+  return { event, data: dataLines.join('\n') }
+}
+
+function dispatch(evt: { event: string; data: string }, h: StreamHandlers) {
+  const data = JSON.parse(evt.data || 'null')
+  switch (evt.event) {
+    case 'step': h.onStep(data); break
+    case 'token': h.onToken(data.text ?? ''); break
+    case 'references': h.onReferences(data.docs ?? [], data.graph_facts ?? []); break
+    case 'safety': h.onSafety(data.type, data.message ?? ''); break
+    case 'done': h.onDone(data.metrics ?? {}); break
+    default: break
+  }
 }
