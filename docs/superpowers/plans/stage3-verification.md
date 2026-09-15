@@ -2,7 +2,7 @@
 
 - 日期：2026-09-15
 - 环境：Windows 11 / Python 3.12 / langgraph **1.2.11**（requirements 仅约束 `langgraph>=0.2.0`，未钉上限）/ Neo4j 容器 medirag-neo4j（33 节点 / 32 边）/ DeepSeek 流式生成 + SiliconFlow rerank 真实调用
-- 结论先行：**【发现阻断级缺陷】`/api/chat/stream` 在真实 langgraph 下 100% 崩溃**（`app/api/chat.py:47` 对 `graph.stream(stream_mode="updates")` 的产出形状解包错误）。66 个单元测试全绿、前端 type-check/build 零错误，但 API 层端到端实测全部被该缺陷阻断。Agent 图本身的六项验收（意图路由 / 工具轨迹 / 多轮改写 / 兜底 / 急症拦截 / reflect）已用真实 API 在**图级**逐项验证通过，证据见下文。
+- 结论先行：**【初测发现阻断级缺陷，已修复并复测通过】** 初测时 `/api/chat/stream` 在真实 langgraph 下 100% 崩溃（`app/api/chat.py:47` 对 `graph.stream(stream_mode="updates")` 的产出形状解包错误）；修复（commit `b9b50c7`：dict/元组双形状适配 + mock 形状对齐真实 API + requirements 收紧 `langgraph>=1.2,<2`）后 SSE 层五项复测全部通过（见文末「修复后复测」小节）。Agent 图六项验收（意图路由 / 工具轨迹 / 多轮改写 / 兜底 / 急症拦截 / reflect）与浏览器视觉验收均通过。
 
 ## 1. 阻断级缺陷：SSE 流式协议在真实 langgraph 下崩溃
 
@@ -144,3 +144,34 @@ rerank   evidence_n=5 confidence=0.1686 status=知识库未匹配
 | SSE 事件协议（step/token/references/done/safety） | **✗ 阻断** | §1，chat.py:47 解包错误 |
 
 **总判定：DONE_WITH_CONCERNS。** Agent 编排、意图路由、检索组合、反思、安全拦截、多轮改写、生成与引用——业务逻辑层全部真实验证通过；但对外 SSE 协议层存在 1 行级阻断缺陷（`chat.py:47` `stream_mode="updates"` 应为 `["updates"]` 或按 dict 迭代），且现有 mock 测试无法发现此类协议漂移。**建议后续修复项：** ① 修正解包；② 将 `test_chat_stream.py` 的 fake stream 改为产出与真实 langgraph 相同的形状（或在 CI 中加一条不 mock 图的冒烟流式用例）。
+
+---
+
+## 修复后复测（2026-09-15，commit b9b50c7 后）
+
+### SSE 层五项复测（httpx 流式实测）
+
+| 场景 | 结果 |
+|---|---|
+| 四君子汤组成（relation 意图） | 事件序列 `step×4 → token×19 → references → done`；打字机流式正常 |
+| 今天北京天气（chitchat/未覆盖） | `safety` 事件 `low_confidence` + 拒答话术「知识库中未检索到可靠依据…」 |
+| 胸痛（emergency） | `safety` 事件 `emergency` + 「请立即就医或拨打 120」+ 仍流式生成带急症警示的回答 |
+| 多轮指代（同 session_id） | 第一问「四君子汤由哪些中药组成？」→ 第二问「它有什么禁忌？」正确改写为四君子汤禁忌，图谱事实两条（过敏禁用/证候不符）准确回答 |
+| 全量回归 | pytest 66 通过；前端 type-check + build 零错误 |
+
+### 浏览器视觉验收（前端 dev + 真实后端）
+
+- 空态：主标题「开始一次可追溯的辨证问答」+ 5 常用问题卡片（文案与规格 P0-2 逐字一致）+ 免责声明。
+- 点击「四君子汤由哪些中药组成？」：回答文本采样 5 → 5 → 27 字**增量增长**（打字机真实流式，reactive 修复生效）。
+- 溯源弹窗：5 步流程条全部点亮；数字卡 **向量 11 / 图谱 8 / 关键词 0 / RRF 11**；徽章绿色「证据充分，正常生成」。
+- 服务验收后已停止（8000/5173 端口释放）。
+
+### 阶段 3 验收对照（合并方案「阶段 3 验证」小节）
+
+| 验收项 | 状态 |
+|---|---|
+| 不同问题走不同工具组合（意图路由矩阵） | ✅ 图级 + SSE 级实测（concept 走向量+关键词 graph_n=0；relation 图谱为主） |
+| trace 里看到 Agent 的 plan | ✅ understand/retrieve 事件含 entities/intent/plan 工具轨迹 |
+| 多轮指代正确改写 | ✅ 「它有什么禁忌？」→ 四君子汤禁忌 |
+| 乱问触发兜底 | ✅ low_confidence 拒答 |
+| 首轮不足、反思后补查成功 demo case | ✅ 真实触发 1 轮 reflect（初测记录）+ 图级测试 test_agent_graph.py 固化 |
