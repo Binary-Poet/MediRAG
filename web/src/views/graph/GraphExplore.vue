@@ -20,7 +20,9 @@ const entities = ref<GraphEntity[]>([])
 const selected = ref<GraphEntity | null>(null)
 const detail = ref<(GraphEntity & { desc: string; source: string }) | null>(null)
 const chartRef = ref<HTMLElement>()
+const chartReady = ref(false)
 let chart: echarts.ECharts | undefined
+let resizeTimer: number | undefined
 
 const TYPES = ['方剂', '中药', '证候', '症状', '功效', '禁忌']
 
@@ -44,6 +46,7 @@ function renderGraph(nodes: GraphNode[], links: GraphLink[]) {
   if (!chartRef.value) return
   if (!chart) {
     chart = echarts.init(chartRef.value)
+    chartReady.value = true
     // 点节点联动左列表与右详情（规格 P0-5 交互验收①）；只注册一次，避免重复叠加
     chart.on('click', (p) => {
       if (p.dataType === 'node' && p.name) focusEntity(p.name)
@@ -58,13 +61,16 @@ function renderGraph(nodes: GraphNode[], links: GraphLink[]) {
       label: { show: true, fontSize: 11 },
       force: { repulsion: 300, edgeLength: 90 },
       edgeLabel: { show: true, fontSize: 10, formatter: (p: any) => p.data.relation },
-      data: nodes.map(n => ({
-        id: n.name, name: n.name,
-        category: TYPES.indexOf(n.category), symbolSize: n.status === '候选' ? 22 : 30,
-        itemStyle: n.status === '候选'
-          ? { borderType: 'dashed', borderWidth: 2, borderColor: theme.textColorMuted }
-          : {},
-      })),
+      data: nodes.map(n => {
+        const category = TYPES.indexOf(n.category)
+        return {
+          id: n.name, name: n.name,
+          category: category >= 0 ? category : 0, symbolSize: n.status === '候选' ? 22 : 30,
+          itemStyle: n.status === '候选'
+            ? { borderType: 'dashed', borderWidth: 2, borderColor: theme.textColorMuted }
+            : {},
+        }
+      }),
       links: links.map(l => ({ source: l.source, target: l.target, relation: l.relation })),
       lineStyle: { color: theme.safetyBg, width: 1.5, curveness: 0.08 },
     }],
@@ -73,9 +79,10 @@ function renderGraph(nodes: GraphNode[], links: GraphLink[]) {
 
 function resizeChart() { chart?.resize() }
 
-watch(activeTab, (v) => { if (v === 'browse') setTimeout(resizeChart, 50) })
+watch(activeTab, (v) => { if (v === 'browse') resizeTimer = window.setTimeout(resizeChart, 50) })
 onMounted(() => { doSearch(); window.addEventListener('resize', resizeChart) })
 onUnmounted(() => {
+  window.clearTimeout(resizeTimer)
   window.removeEventListener('resize', resizeChart)
   chart?.dispose()
 })
@@ -108,7 +115,7 @@ onUnmounted(() => {
 
           <div class="canvas-wrap">
             <div ref="chartRef" class="chart" />
-            <el-empty v-if="!chart" class="canvas-empty" description="点击左侧实体查看关系图" />
+            <el-empty v-if="!chartReady" class="canvas-empty" description="点击左侧实体查看关系图" />
           </div>
 
           <aside class="detail-panel">
@@ -132,7 +139,7 @@ onUnmounted(() => {
         </div>
       </el-tab-pane>
 
-      <el-tab-pane label="候选审核" name="review">
+      <el-tab-pane label="候选审核" name="review" lazy>
         <CandidateReview />
       </el-tab-pane>
     </el-tabs>

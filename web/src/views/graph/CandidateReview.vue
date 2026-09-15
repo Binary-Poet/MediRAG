@@ -53,6 +53,16 @@ async function approveNode(n: CandidateNode) {
   }
 }
 
+async function rejectNode(n: CandidateNode) {
+  try {
+    await rejectCandidate({ kind: 'node', name: n.name })
+    ElMessage.success('已驳回该实体')
+    refresh()
+  } catch (e) {
+    ElMessage.error((e as Error).message)     // 409 时显示后端 detail 原文
+  }
+}
+
 onMounted(refresh)
 </script>
 
@@ -80,9 +90,10 @@ onMounted(refresh)
       <el-table-column prop="name" label="实体" min-width="160" />
       <el-table-column prop="type" label="类型" width="90" />
       <el-table-column prop="source_doc" label="来源" width="160" show-overflow-tooltip />
-      <el-table-column label="操作" width="100">
+      <el-table-column label="操作" width="140">
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click="approveNode(row)">发布</el-button>
+          <el-button link type="danger" size="small" @click="rejectNode(row)">驳回</el-button>
         </template>
       </el-table-column>
     </el-table>
