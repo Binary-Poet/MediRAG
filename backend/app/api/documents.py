@@ -1,16 +1,16 @@
 """文档管理 API：上传（multipart）/列表/状态轮询/删除（方案第八节 + 规格 P0-6）。"""
-import shutil
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from app.config import get_settings
 from app.db import session_scope
 from app.ingestion.parsers import SUPPORTED_EXTS
 from app.ingestion.pipeline import ingest_document
 from app.models.document import Document
+from app.retrieval.keyword import rebuild_keyword_index
+from app.retrieval.vector_store import get_store
 
 router = APIRouter()
 
@@ -89,9 +89,6 @@ def parse_status(doc_id: int) -> dict:
 @router.delete("/documents/{doc_id}")
 def delete_document(doc_id: int) -> dict:
     """删除文档：移除记录 + 从向量库剔除该文档切片 + 重建 BM25。"""
-    from app.retrieval.keyword import rebuild_keyword_index
-    from app.retrieval.vector_store import get_store
-
     with session_scope() as s:
         doc = s.get(Document, doc_id)
         if doc is None:
