@@ -57,9 +57,10 @@ function renderGraph(nodes: GraphNode[], links: GraphLink[]) {
     legend: [{ data: TYPES, bottom: 0, textStyle: { fontSize: 11 } }],
     series: [{
       type: 'graph', layout: 'force', roam: true, draggable: true,
+      layoutAnimation: true,
       categories: TYPES.map(t => ({ name: t, itemStyle: { color: TYPE_COLOR[t] } })),
-      label: { show: true, fontSize: 11 },
-      force: { repulsion: 300, edgeLength: 90 },
+      label: { show: true, fontSize: 10, position: 'right' },
+      force: { repulsion: 900, edgeLength: [120, 200], gravity: 0.08 },
       edgeLabel: { show: true, fontSize: 10, formatter: (p: any) => p.data.relation },
       data: nodes.map(n => {
         const category = TYPES.indexOf(n.category)
@@ -71,7 +72,10 @@ function renderGraph(nodes: GraphNode[], links: GraphLink[]) {
             : {},
         }
       }),
-      links: links.map(l => ({ source: l.source, target: l.target, relation: l.relation })),
+      links: links.map(l => ({
+        source: l.source, target: l.target, relation: l.relation,
+        lineStyle: l.status === '候选' ? { type: 'dashed', color: theme.textColorMuted } : {},
+      })),
       lineStyle: { color: theme.safetyBg, width: 1.5, curveness: 0.08 },
     }],
   })
@@ -159,7 +163,7 @@ onUnmounted(() => {
 .entity-type { transform: scale(0.9); }
 .canvas-wrap { background: v-bind(theme.cardBg); border: 1px solid v-bind(theme.borderColor); border-radius: v-bind(theme.borderRadius); position: relative; }
 .canvas-empty { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; pointer-events: none; }
-.chart { width: 100%; height: 600px; }
+.chart { width: 100%; height: 640px; }
 .detail-head { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
 .detail-field { margin-bottom: 10px; font-size: 13px; }
 .detail-field label { display: block; color: v-bind(theme.textColorSecondary); font-size: 12px; margin-bottom: 2px; }
