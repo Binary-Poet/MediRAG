@@ -7,6 +7,8 @@ import { streamChat } from '../../api/chat'
 import { authHeaders } from '../../api/http'
 import { theme } from '../../styles/theme'
 import type { GraphFact, Reference, StepEvent } from '../../types/chat'
+import SessionList from './components/SessionList.vue'
+import { useSessionStore } from '../../stores/session'
 import TraceDialog from './components/TraceDialog.vue'
 import TraceSteps from './components/TraceSteps.vue'
 
@@ -36,9 +38,52 @@ const messages = ref<QA[]>([])
 const input = ref('')
 const loading = ref(false)
 const listRef = ref<HTMLElement>()
-const sessionId = (globalThis.crypto?.randomUUID?.() ?? `s-${Math.random().toString(36).slice(2)}`)
 const traceVisible = ref(false)
 const currentTrace = ref<StepEvent[]>([])
+
+const sessionStore = useSessionStore()
+
+/** 新建对话：清空问答区并解绑当前会话（首个提问由后端建会话） */
+function newSession() {
+  if (loading.value) return   // 流式进行中不切换，避免清空消息区后 onDone 把 activeId 设到别的会话
+  messages.value = []
+  sessionStore.activeId = ''
+  currentTrace.value = []
+}
+
+/** 打开历史会话：把落库 payload 还原成现有 QA 结构，复用同一套卡片渲染 */
+async function openSession(id: string) {
+  if (loading.value) return
+  try {
+    const msgs = await sessionStore.loadMessages(id)
+    const built: QA[] = []
+    for (let i = 0; i < msgs.length; i += 1) {
+      const m = msgs[i]
+      if (m.role !== 'user') continue
+      const a = msgs[i + 1]?.role === 'assistant' ? msgs[i + 1] : null
+      built.push(reactive<QA>({
+        question: m.content,
+        answer: a?.content ?? '',
+        references: a?.payload?.references ?? [],
+        graphFacts: a?.payload?.graph_facts ?? [],
+        safety: a?.payload?.safety ?? null,
+        trace: a?.payload?.trace ?? [],
+        thinkingExpanded: false,
+      }))
+    }
+    messages.value = built
+    sessionStore.activeId = id
+    currentTrace.value = []
+    await scrollToBottom()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
+/** 删除的若是当前会话，问答区复位到空态 */
+function onDeleted(id: string) {
+  if (sessionStore.activeId === id) newSession()
+}
 
 async function scrollToBottom() {
   await nextTick()
@@ -95,8 +140,13 @@ async function send(q?: string) {
         // 后端 error 事件：保留已流式内容，仅在尚无输出时给失败话术
         if (!item.answer) item.answer = `请求失败：${detail}`
       },
-      onDone: () => {},
-    }, sessionId)
+      onDone: (data) => {
+        // 认领会话 id：新会话由后端在本轮创建，前端据此激活并刷新列表
+        // 可选链：done 事件 data 为空时后端传出 null，直接取 .message_id 会抛 TypeError
+        if (data?.message_id) sessionStore.activeId = data.message_id
+        sessionStore.refresh().catch(() => {})   // 列表刷新失败不影响本轮回答
+      },
+    }, sessionStore.activeId || undefined)
   } catch (e) {
     item.answer ||= `请求失败：${(e as Error).message}`
   } finally {
@@ -116,7 +166,7 @@ async function sendFeedback(m: QA, useful: boolean) {
   try {
     const resp = await fetch('/api/feedback', {
       method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ session_id: sessionId, useful }),
+      body: JSON.stringify({ session_id: sessionStore.activeId, useful }),
     })
     if (!resp.ok) throw new Error(`反馈提交失败（${resp.status}）`)
   } catch (e) {
@@ -136,7 +186,10 @@ function onEnter(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="chat-page">
+  <div class="chat-wrap">
+    <SessionList @create="newSession" @select="openSession" @deleted="onDeleted" />
+
+    <div class="chat-page">
     <div v-if="messages.length === 0" class="empty">
       <div class="empty-sub">文献与图谱联合检索</div>
       <h3 class="empty-title">开始一次可追溯的辨证问答</h3>
@@ -257,11 +310,21 @@ function onEnter(e: KeyboardEvent) {
     <p class="disclaimer">本答案仅提供中医药知识科普，不替代辨证、诊断或个体化处方。如有紧急情况请拨打 120。</p>
 
     <TraceDialog v-model:visible="traceVisible" :steps="currentTrace" />
+    </div>
   </div>
 </template>
 
 <style scoped>
+.chat-wrap {
+  display: flex;
+  gap: 14px;
+  height: 100%;
+  align-items: stretch;
+}
+
 .chat-page {
+  flex: 1;
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;

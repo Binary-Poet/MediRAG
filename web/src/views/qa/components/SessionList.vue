@@ -142,6 +142,11 @@ onMounted(() => {
   padding: 14px 14px 10px;
 }
 
+.sl-head-text {
+  flex: 1;
+  min-width: 0;
+}
+
 .sl-title {
   font-size: 15px;
   font-weight: 600;
