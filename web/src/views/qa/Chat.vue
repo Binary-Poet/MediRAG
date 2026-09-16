@@ -8,6 +8,7 @@ import { authHeaders } from '../../api/http'
 import { theme } from '../../styles/theme'
 import type { GraphFact, Reference, StepEvent } from '../../types/chat'
 import TraceDialog from './components/TraceDialog.vue'
+import TraceSteps from './components/TraceSteps.vue'
 
 interface QA {
   question: string
@@ -16,6 +17,8 @@ interface QA {
   graphFacts: GraphFact[]
   safety: { type: string; message: string } | null
   trace: StepEvent[]
+  thinkingExpanded: boolean
+  thinkingInteracted?: boolean
   feedback?: boolean
 }
 
@@ -49,10 +52,9 @@ async function send(q?: string) {
   loading.value = true
   // reactive：流式回调闭包直接 mutate 代理对象才能触发视图更新
   //（普通对象 push 进 messages 后，闭包持原始引用 mutate 不触发任何 effect）
-  const item = reactive<QA>({ question, answer: '', references: [], graphFacts: [], safety: null, trace: [] })
+  const item = reactive<QA>({ question, answer: '', references: [], graphFacts: [], safety: null, trace: [], thinkingExpanded: true })
   messages.value.push(item)
   currentTrace.value = []
-  traceVisible.value = true
   await scrollToBottom()
 
   try {
@@ -66,6 +68,10 @@ async function send(q?: string) {
           // 首个 token 到达：点亮第 5 步「生成回答」
           item.trace.push({ step: 'generate' })
           currentTrace.value = [...item.trace]
+        }
+        if (!item.answer && !item.thinkingInteracted) {
+          // 首个 token：思考完成，自动折叠为「已深度思考」（用户已手动操作过则保留其展开态）
+          item.thinkingExpanded = false
         }
         item.answer += text
         scrollToBottom()
@@ -154,6 +160,26 @@ function onEnter(e: KeyboardEvent) {
                急症话术/拒答提示优先；低置信时正文为空、仅显示本框 -->
           <div v-if="m.safety && m.safety.type !== 'ok'" class="safety-box warn">
             {{ m.safety.message }}
+          </div>
+
+          <!-- 思考过程折叠块（DeepSeek 风格）：思考阶段展开逐步点亮，首个 token 后自动折叠 -->
+          <div
+            v-if="m.trace.length"
+            class="thinking"
+            :class="{ open: m.thinkingExpanded, running: loading && i === messages.length - 1 && !m.answer }"
+          >
+            <div class="thinking-head" @click="m.thinkingInteracted = true; m.thinkingExpanded = !m.thinkingExpanded">
+              <span class="thinking-dot" />
+              <span class="thinking-title">思考过程</span>
+              <span class="thinking-status">
+                <span v-if="loading && i === messages.length - 1 && !m.answer">思考中…</span>
+                <span v-else>已深度思考</span>
+              </span>
+              <span class="thinking-arrow">{{ m.thinkingExpanded ? '▾' : '▸' }}</span>
+            </div>
+            <div v-if="m.thinkingExpanded" class="thinking-body">
+              <TraceSteps :steps="m.trace" />
+            </div>
           </div>
 
           <!-- 正文：低置信（无生成内容）时不渲染占位，避免与框内话术重复 -->
@@ -363,6 +389,63 @@ function onEnter(e: KeyboardEvent) {
 .answer-text {
   white-space: pre-wrap;
   line-height: 1.8;
+}
+
+.thinking {
+  margin-top: 10px;
+  border: 1px solid v-bind(theme.borderColor);
+  border-radius: 8px;
+  background: v-bind(theme.autoSectionBg);
+  overflow: hidden;
+}
+.thinking-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.thinking-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: v-bind(theme.colorPrimary);
+}
+.thinking.running .thinking-dot {
+  animation: thinking-pulse 1.1s ease-in-out infinite;
+}
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+.thinking-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: v-bind(theme.textColorPrimary);
+}
+.thinking-status {
+  font-size: 12px;
+  color: v-bind(theme.textColorMuted);
+}
+.thinking.running .thinking-status {
+  color: v-bind(theme.colorPrimary);
+}
+.thinking-arrow {
+  margin-left: auto;
+  font-size: 12px;
+  color: v-bind(theme.textColorSecondary);
+}
+.thinking-body {
+  border-top: 1px dashed v-bind(theme.borderColor);
+  padding: 10px 12px 12px;
 }
 
 .cursor {

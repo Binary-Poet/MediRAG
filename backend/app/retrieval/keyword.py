@@ -3,6 +3,8 @@
 索引构建自 vector store 的同一批切片（get_store().chunks），保证
 向量/关键词两路元数据与 chunk_id 一致性，供 RRF 按 chunk_id 去重融合。
 """
+import threading
+
 import jieba
 from rank_bm25 import BM25Okapi
 
@@ -39,14 +41,17 @@ class KeywordIndex:
 
 
 _index: KeywordIndex | None = None
+_index_lock = threading.Lock()
 
 
 def get_keyword_index() -> KeywordIndex:
-    """进程级单例：懒构建，语料来自向量库已入库切片。"""
+    """进程级单例：懒构建，语料来自向量库已入库切片。双检锁防并发首次初始化。"""
     global _index
     if _index is None:
-        _index = KeywordIndex()
-        _index.build(get_store().chunks)
+        with _index_lock:
+            if _index is None:
+                _index = KeywordIndex()
+                _index.build(get_store().chunks)
     return _index
 
 

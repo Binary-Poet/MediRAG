@@ -1,4 +1,6 @@
 """异步入库流水线测试：SQLite + 内存向量库 + monkeypatch 向量化，无网络。"""
+import threading
+
 import app.db as dbmod
 import app.ingestion.pipeline as pmod
 import app.retrieval.keyword as kmod
@@ -89,3 +91,31 @@ def test_rebuild_keyword_index_rebuilds_from_store(monkeypatch, tmp_path):
     kmod.rebuild_keyword_index()
     hits = kmod.get_keyword_index().search("四君子汤", top_k=5)
     assert hits and hits[0]["chunk_id"] == "a#0000"
+
+
+def test_get_keyword_index_concurrent_builds_once(monkeypatch, tmp_path):
+    """并发首调不重复构建索引（双检锁）：8 线程同时进 get_keyword_index 只 build 一次。"""
+    store = LocalVectorStore(str(tmp_path / "idx.json"))
+    store.upsert([{"chunk_id": "a#0000", "title": "四君子汤", "text": "人参白术茯苓炙甘草",
+                   "doc_name": "a.md", "chapter": "第 1 页", "page_no": 1, "topic": "内科",
+                   "embedding": [1.0, 0.0]}])
+    monkeypatch.setattr(kmod, "get_store", lambda: store)
+    monkeypatch.setattr(kmod, "_index", None)  # 强制冷启动
+
+    built = {"n": 0}
+    orig_build = kmod.KeywordIndex.build
+
+    def counting_build(self, chunks):
+        built["n"] += 1
+        return orig_build(self, chunks)
+
+    monkeypatch.setattr(kmod.KeywordIndex, "build", counting_build)
+
+    threads = [threading.Thread(target=kmod.get_keyword_index) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert built["n"] == 1
+    assert kmod.get_keyword_index() is not None
