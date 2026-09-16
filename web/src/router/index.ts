@@ -36,7 +36,7 @@ const router = createRouter({
         {
           path: 'overview',
           name: 'overview',
-          component: () => import('../views/Placeholder.vue'),
+          component: () => import('../views/overview/Dashboard.vue'),
           meta: { title: '运行概览', breadcrumb: '运行概览', phase: '阶段 5' },
         },
         {
