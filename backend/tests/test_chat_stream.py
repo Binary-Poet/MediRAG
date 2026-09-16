@@ -170,3 +170,69 @@ def test_stream_rejects_foreign_session(client, monkeypatch):
 
 def test_stream_requires_auth(client):
     assert client.post("/api/chat/stream", json={"question": "问"}).status_code == 401
+
+
+def _done_session_id(raw: str) -> str:
+    import json as _json
+    line = [ln for ln in raw.splitlines() if ln.startswith("data:") and "message_id" in ln][0]
+    return _json.loads(line[len("data:"):].strip())["message_id"]
+
+
+def test_chat_reads_history_before_appending_current_question(client, monkeypatch):
+    """时序不变量（本计划 #1 全局约束）：建会话 → 取历史 → 写当前提问 → 跑图。
+
+    历史必须是「本轮之前」的历史。把 chat.py 的 get_history / append_message 对调
+    后，若没有以下断言则整套测试仍会全绿（假图从不消费 chat_history，无人察觉），
+    线上表现却是「每轮追问把自己的问题也当历史再答一遍」。故用三层断言钉死：
+      1) 调用顺序：前三步依次是 建会话 → 取历史 → 写提问；
+      2) 后果：本轮提问不出现在本轮 chat_history；
+      3) 后果：第二轮能读到第一问原文（历史确实生效），且仍不含本轮提问。
+    """
+    q1, q2 = "四君子汤由哪些中药组成？", "它的禁忌是什么？"
+
+    fake = _patch_agent(client, monkeypatch)         # 复用假图 + 假 LLM
+    chunks = list(fake.stream.return_value)          # 保住原有 chunk 列表，只接管入参
+    histories: list[list[dict]] = []
+
+    def _capture(initial, *args, **kwargs):
+        histories.append(list(initial.get("chat_history", [])))
+        return iter(chunks)
+
+    fake.stream.side_effect = _capture
+
+    order: list[str] = []
+    real_create = chatmod.chat_session.create_session
+    real_history = chatmod.get_history
+    real_append = chatmod.chat_session.append_message
+
+    def spy_create(*a, **k):
+        order.append("create_session")
+        return real_create(*a, **k)
+
+    def spy_history(*a, **k):
+        order.append("get_history")
+        return real_history(*a, **k)
+
+    def spy_append(*a, **k):
+        order.append("append_message")
+        return real_append(*a, **k)
+
+    # get_history 是 `from app.agent.memory import get_history` 直接导入，必须打在模块属性上
+    monkeypatch.setattr(chatmod.chat_session, "create_session", spy_create)
+    monkeypatch.setattr(chatmod, "get_history", spy_history)
+    monkeypatch.setattr(chatmod.chat_session, "append_message", spy_append)
+
+    headers = _auth(client)
+    with client.stream("POST", "/api/chat/stream", json={"question": q1}, headers=headers) as resp:
+        sid = _done_session_id("".join(resp.iter_text()))
+    with client.stream("POST", "/api/chat/stream", json={"question": q2, "session_id": sid},
+                       headers=headers) as resp:
+        "".join(resp.iter_text())
+
+    # 1) 顺序断言
+    assert order[:3] == ["create_session", "get_history", "append_message"]
+    # 2) 后果断言：本轮提问不在本轮历史里（对调后第一轮历史会含 q1）
+    assert all(m["content"] != q1 for m in histories[0])
+    # 3) 后果断言：第二轮历史含第一问原文，且不含本轮提问
+    assert any(m["content"] == q1 for m in histories[1])
+    assert all(m["content"] != q2 for m in histories[1])

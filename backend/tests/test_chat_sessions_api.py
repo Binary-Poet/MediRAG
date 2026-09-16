@@ -63,6 +63,16 @@ def test_list_requires_auth(client):
     assert client.get("/api/chat/sessions").status_code == 401
 
 
+def test_write_and_replay_endpoints_require_auth(client):
+    """PATCH / DELETE / messages 三个端点无凭证一律 401。
+
+    这些正是 require_admin/current_user 改造时最容易漏挂依赖的地方，补上鉴权断言。
+    """
+    assert client.patch("/api/chat/sessions/x", json={"favorite": True}).status_code == 401
+    assert client.delete("/api/chat/sessions/x").status_code == 401
+    assert client.get("/api/chat/sessions/x/messages").status_code == 401
+
+
 def test_favorite_toggle_then_filter(client, admin):
     a = _seed()
     r = client.patch(f"/api/chat/sessions/{a}", json={"favorite": True}, headers=admin)
