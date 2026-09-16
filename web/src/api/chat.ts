@@ -1,5 +1,8 @@
 /** SSE 流式问答（fetch ReadableStream 解析，EventSource 不支持 POST） */
-import type { StreamHandlers } from '../types/chat'
+import { authHeaders } from './http'
+import type {
+  SessionListResponse, StoredMessage, StreamHandlers,
+} from '../types/chat'
 
 export async function streamChat(
   question: string,
@@ -8,12 +11,11 @@ export async function streamChat(
 ): Promise<void> {
   const resp = await fetch('/api/chat/stream', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ question, session_id: sessionId }),
   })
   if (!resp.ok || !resp.body) {
-    const detail = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }))
-    throw new Error(detail.detail ?? `请求失败（${resp.status}）`)
+    throw new Error(await detail(resp))
   }
   const reader = resp.body.getReader()
   const decoder = new TextDecoder('utf-8')
@@ -56,7 +58,40 @@ function dispatch(evt: { event: string; data: string }, h: StreamHandlers) {
     case 'references': h.onReferences(data.docs ?? [], data.graph_facts ?? []); break
     case 'safety': h.onSafety(data.type, data.message ?? ''); break
     case 'error': h.onError?.(String(data.detail ?? '未知错误')); break
-    case 'done': h.onDone(data.metrics ?? {}); break
+    case 'done': h.onDone(data); break
     default: break
   }
+}
+
+async function detail(resp: Response): Promise<string> {
+  const body = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }))
+  return body.detail ?? `请求失败（${resp.status}）`
+}
+
+export async function listSessions(favoriteOnly = false): Promise<SessionListResponse> {
+  const resp = await fetch(`/api/chat/sessions?favorite=${favoriteOnly}`, { headers: authHeaders() })
+  if (!resp.ok) throw new Error(await detail(resp))
+  return resp.json()
+}
+
+export async function setSessionFavorite(sessionId: string, favorite: boolean): Promise<void> {
+  const resp = await fetch(`/api/chat/sessions/${sessionId}`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ favorite }),
+  })
+  if (!resp.ok) throw new Error(await detail(resp))
+}
+
+export async function deleteSession(sessionId: string): Promise<void> {
+  const resp = await fetch(`/api/chat/sessions/${sessionId}`, {
+    method: 'DELETE', headers: authHeaders(),
+  })
+  if (!resp.ok) throw new Error(await detail(resp))
+}
+
+export async function fetchSessionMessages(sessionId: string): Promise<StoredMessage[]> {
+  const resp = await fetch(`/api/chat/sessions/${sessionId}/messages`, { headers: authHeaders() })
+  if (!resp.ok) throw new Error(await detail(resp))
+  return (await resp.json()).messages
 }

@@ -40,5 +40,38 @@ export interface StreamHandlers {
   onReferences: (refs: Reference[], graphFacts: GraphFact[]) => void
   onSafety: (type: string, message: string) => void
   onError?: (detail: string) => void
-  onDone: (metrics: Record<string, number>) => void
+  onDone: (data: DonePayload) => void
+}
+
+export interface SessionSummary {
+  session_id: string
+  title: string
+  favorite: boolean
+  message_count: number
+  updated_at: string   // ISO，末尾带 Z（UTC）
+}
+
+export interface StoredMessage {
+  seq: number
+  role: 'user' | 'assistant'
+  content: string
+  payload: {
+    trace?: StepEvent[]
+    references?: Reference[]
+    graph_facts?: GraphFact[]
+    safety?: { type: string; message: string } | null
+  } | null
+  created_at: string
+}
+
+export interface SessionListResponse {
+  sessions: SessionSummary[]
+  total: number
+  favorite_total: number
+}
+
+/** done 事件载荷：message_id 即会话 id，前端据此认领本轮新建的会话 */
+export interface DonePayload {
+  message_id?: string
+  metrics?: Record<string, number>
 }
