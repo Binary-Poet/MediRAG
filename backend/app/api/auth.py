@@ -24,16 +24,28 @@ def _token(user: User) -> str:
 
 def _user_from_token(token: str) -> User | None:
     try:
-        _, uid, _ = token.split(":")
-        with session_scope() as s:
-            return s.get(User, int(uid))
-    except Exception:
+        _, uid, sig = token.split(":")
+        uid_i = int(uid)
+    except ValueError:
         return None
+    with session_scope() as s:
+        u = s.get(User, uid_i)
+    # 签名分量必须校验，否则任意 `user:<id>:任意串` 都能冒充该用户。
+    if u is None or sig != _hash(u.username, SESSION_SECRET)[:16]:
+        return None
+    return u
 
 
 def current_user(cred: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> User:
     if cred is None or (u := _user_from_token(cred.credentials)) is None:
         raise HTTPException(status_code=401, detail="未登录或登录已失效")
+    return u
+
+
+def require_admin(u: User = Depends(current_user)) -> User:
+    """账户管理类接口的窄依赖：仅管理员可操作。"""
+    if u.role != "管理员":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     return u
 
 

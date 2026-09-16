@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.api.auth import _hash, current_user
+from app.api.auth import _hash, require_admin
 from app.db import session_scope
 from app.models.user import ROLES, User
 
@@ -17,7 +17,7 @@ class UserBody(BaseModel):
 
 
 @router.get("/users")
-def list_users(_: User = Depends(current_user)) -> dict:
+def list_users(_: User = Depends(require_admin)) -> dict:
     with session_scope() as s:
         items = [{"id": u.id, "username": u.username, "display_name": u.display_name,
                   "role": u.role} for u in s.query(User).order_by(User.id).all()]
@@ -25,7 +25,7 @@ def list_users(_: User = Depends(current_user)) -> dict:
 
 
 @router.post("/users")
-def create_user(body: UserBody, _: User = Depends(current_user)) -> dict:
+def create_user(body: UserBody, _: User = Depends(require_admin)) -> dict:
     if body.role not in ROLES:
         raise HTTPException(status_code=422, detail="role 取值 管理员|中医药从业者|知识用户")
     if len(body.password) < 6:
@@ -42,10 +42,12 @@ def create_user(body: UserBody, _: User = Depends(current_user)) -> dict:
 
 
 @router.delete("/users/{user_id}")
-def delete_user(user_id: int, _: User = Depends(current_user)) -> dict:
+def delete_user(user_id: int, u: User = Depends(require_admin)) -> dict:
+    if user_id == u.id:
+        raise HTTPException(status_code=403, detail="不能删除当前登录用户")
     with session_scope() as s:
-        u = s.get(User, user_id)
-        if u is None:
+        row = s.get(User, user_id)
+        if row is None:
             raise HTTPException(status_code=404, detail="用户不存在")
-        s.delete(u)
+        s.delete(row)
     return {"deleted": user_id}

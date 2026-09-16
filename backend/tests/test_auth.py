@@ -47,3 +47,20 @@ def test_change_password(client):
                        json={"username": "user1", "password": "newpass1"}).status_code == 200
     assert client.post("/api/auth/login",
                        json={"username": "user1", "password": "admin123"}).status_code == 401
+
+
+def test_token_signature_is_verified(client):
+    """签名分量必须校验：伪造/篡改的 token 不可冒充用户（Ruling T4-1）。"""
+    assert client.get("/api/auth/me",
+                      headers={"Authorization": "Bearer user:1:deadbeef"}).status_code == 401
+    assert client.get("/api/auth/me",
+                      headers={"Authorization": "Bearer garbage"}).status_code == 401
+    # 跨用户冒充：拿 user1 的合法签名去顶 admin 的 id
+    tok = client.post("/api/auth/login",
+                      json={"username": "user1", "password": "admin123"}).json()["token"]
+    _, _, sig = tok.split(":")
+    assert client.get("/api/auth/me",
+                      headers={"Authorization": f"Bearer user:1:{sig}"}).status_code == 401
+    # 合法 token 仍可用（未过度收紧）
+    assert client.get("/api/auth/me",
+                      headers={"Authorization": f"Bearer {tok}"}).status_code == 200
