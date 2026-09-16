@@ -128,10 +128,12 @@ def rename_document(doc_id: int, body: RenameBody) -> dict:
         d = s.get(Document, doc_id)
         if d is None:
             raise HTTPException(status_code=404, detail="文档不存在")
-        # 与上传不同：重命名校验覆盖全部记录（含失败态）——原记录名称仍被占用即拒绝，
-        # 避免列表出现两条同名（规格 P0-6 名称唯一性）
+        if ext != d.file_type:
+            raise HTTPException(status_code=400, detail=f"扩展名需与原文一致（{d.file_type}）")
+        # 与上传对齐：失败态名字可复用，故查重排除 status='失败' 的记录
         dup = s.query(Document).filter(Document.name == new_name,
-                                       Document.id != doc_id).first()
+                                       Document.id != doc_id,
+                                       Document.status != "失败").first()
         if dup is not None:
             raise HTTPException(status_code=409, detail=f"已存在同名文档《{new_name}》")
         d.name = new_name
