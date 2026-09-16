@@ -30,7 +30,7 @@ def _patch_agent(client, monkeypatch, *, safety="ok", answer=None, safety_messag
         {"context": {"prompt": "P"}},
     ]
     monkeypatch.setattr(chatmod, "get_agent", lambda: fake_graph)
-    monkeypatch.setattr(chatmod, "chat_completion_stream", lambda system, user, temperature=0.3: iter(["四君子汤由人参、白术、茯苓、炙甘草组成 [1]"]))
+    monkeypatch.setattr(chatmod, "chat_completion_stream", lambda system, user, temperature=0.3, vendor=None, model=None: iter(["四君子汤由人参、白术、茯苓、炙甘草组成 [1]"]))
     return fake_graph
 
 
@@ -72,7 +72,7 @@ def test_stream_emergency_injects_emergency_system_prompt(client, monkeypatch):
                  safety_message="您提到的情况可能属于急症，请立即就医或拨打 120。")
     seen = {}
 
-    def _cap(system, user, temperature=0.3):
+    def _cap(system, user, temperature=0.3, vendor=None, model=None):
         seen["system"] = system
         yield "请立即就医"
 
@@ -91,7 +91,7 @@ def test_stream_empty_question_rejected(client):
 def test_stream_generation_error_emits_error_event(client, monkeypatch):
     _patch_agent(client, monkeypatch)
 
-    def _boom(system, user, temperature=0.3):
+    def _boom(system, user, temperature=0.3, vendor=None, model=None):
         raise RuntimeError("LLM 网络故障")
         yield  # pragma: no cover
 

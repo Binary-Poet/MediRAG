@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.chat import router as chat_router
 from app.api.config import router as config_router
 from app.api.documents import router as documents_router
+from app.api.feedback import router as feedback_router
 from app.api.graph_api import router as graph_router
 from app.config import get_settings
 from app.db import init_db
@@ -24,6 +25,7 @@ app.add_middleware(
 app.include_router(chat_router, prefix="/api")
 app.include_router(config_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")
+app.include_router(feedback_router, prefix="/api")
 app.include_router(graph_router, prefix="/api")
 
 

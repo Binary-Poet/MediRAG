@@ -25,3 +25,4 @@ class AgentState(TypedDict):
     prompt: str                       # 组装好的最终生成 Prompt（供宿主流式生成）
     answer: str                       # 兜底固定话术（非流式）或最终完整回答（流式完成后回填供记忆）
     trace: Annotated[list, add]       # SSE step 事件流：节点只返回本次新增事件，langgraph 自动累计
+    inference: dict                   # 推理配置（chat.py 注入；节点侧 state.get("inference") 回落 settings）
