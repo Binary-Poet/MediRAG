@@ -45,6 +45,13 @@ async function scrollToBottom() {
   listRef.value?.scrollTo({ top: listRef.value.scrollHeight })
 }
 
+/** 该条是否处于「思考中」：请求进行中、尚无 token、且是最后一条。
+    后端第一个 step 事件要等 understand 节点跑完才发出，此前 trace 为空，
+    思考块不能只靠 trace.length 判断，否则这段空窗期只显示正文占位。 */
+function isThinking(i: number, m: QA): boolean {
+  return loading.value && i === messages.value.length - 1 && !m.answer
+}
+
 async function send(q?: string) {
   const question = (q ?? input.value).trim()
   if (!question || loading.value) return
@@ -162,17 +169,17 @@ function onEnter(e: KeyboardEvent) {
             {{ m.safety.message }}
           </div>
 
-          <!-- 思考过程折叠块（DeepSeek 风格）：思考阶段展开逐步点亮，首个 token 后自动折叠 -->
+          <!-- 思考过程折叠块（DeepSeek 风格）：发送即出现（此时流程条全灰），逐步点亮，首个 token 后自动折叠 -->
           <div
-            v-if="m.trace.length"
+            v-if="m.trace.length || isThinking(i, m)"
             class="thinking"
-            :class="{ open: m.thinkingExpanded, running: loading && i === messages.length - 1 && !m.answer }"
+            :class="{ open: m.thinkingExpanded, running: isThinking(i, m) }"
           >
             <div class="thinking-head" @click="m.thinkingInteracted = true; m.thinkingExpanded = !m.thinkingExpanded">
               <span class="thinking-dot" />
               <span class="thinking-title">思考过程</span>
               <span class="thinking-status">
-                <span v-if="loading && i === messages.length - 1 && !m.answer">思考中…</span>
+                <span v-if="isThinking(i, m)">思考中…</span>
                 <span v-else>已深度思考</span>
               </span>
               <span class="thinking-arrow">{{ m.thinkingExpanded ? '▾' : '▸' }}</span>
@@ -182,12 +189,12 @@ function onEnter(e: KeyboardEvent) {
             </div>
           </div>
 
-          <!-- 正文：低置信（无生成内容）时不渲染占位，避免与框内话术重复 -->
+          <!-- 正文：思考阶段由思考块承担进度指示，此处不出占位；低置信（无生成内容）时也不渲染 -->
           <div
-            v-if="m.answer || m.safety?.type !== 'low_confidence'"
+            v-if="m.answer || (m.safety?.type !== 'low_confidence' && !isThinking(i, m))"
             class="answer-text"
           >
-            {{ m.answer || '正在生成…' }}<span
+            {{ m.answer }}<span
               v-if="loading && i === messages.length - 1 && m.answer"
               class="cursor"
             />
