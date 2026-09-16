@@ -52,8 +52,26 @@ def session_scope(engine=None):
         session.close()
 
 
-def init_db(engine=None) -> None:
-    """建表（幂等）。应用启动时调用。"""
-    from app.models import document, feedback, inference_config, retrieval_log  # noqa: F401  确保模型注册到 Base
+def _seed_users(engine) -> None:
+    """演示账号（密码均为 admin123，仅本地演示；生产需换密码策略）。"""
+    from sqlalchemy import select
+    from app.models.user import User
+    from app.db import session_scope
+    import hashlib
+    with session_scope(engine) as s:
+        if s.execute(select(User)).first():
+            return
+        for u, dn, role in (("admin", "系统管理员", "管理员"),
+                            ("user1", "知识用户", "知识用户"),
+                            ("tcm1", "张大夫", "中医药从业者")):
+            s.add(User(username=u, display_name=dn, role=role,
+                       password_hash=hashlib.sha256(f"{u}:admin123".encode()).hexdigest()))
 
-    Base.metadata.create_all(engine or get_engine())
+
+def init_db(engine=None) -> None:
+    """建表（幂等）+ 演示账号 seed。应用启动时调用。"""
+    from app.models import document, feedback, inference_config, retrieval_log, user  # noqa: F401  确保模型注册到 Base
+
+    eng = engine or get_engine()
+    Base.metadata.create_all(eng)
+    _seed_users(eng)

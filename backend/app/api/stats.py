@@ -8,6 +8,7 @@ from app.db import session_scope
 from app.models.document import Document
 from app.models.feedback import Feedback
 from app.models.retrieval_log import RetrievalLog
+from app.models.user import User
 from app.services.inference_config import load_inference_config
 
 router = APIRouter()
@@ -29,13 +30,9 @@ def _trend() -> list[dict]:
 
 
 def _role_dist() -> list[dict]:
-    try:
-        from app.models.user import User
-        with session_scope() as s:
-            rows = s.execute(select(User.role, func.count(User.id)).group_by(User.role)).all()
-        return [{"name": r, "value": c} for r, c in rows]
-    except Exception:
-        return []  # users 表尚未可用（Task 4 前）
+    with session_scope() as s:
+        rows = s.execute(select(User.role, func.count(User.id)).group_by(User.role)).all()
+    return [{"name": r, "value": c} for r, c in rows]
 
 
 def _topic_dist() -> list[dict]:
