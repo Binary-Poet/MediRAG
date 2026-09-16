@@ -3,6 +3,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.db import session_scope
@@ -39,6 +40,10 @@ class DocumentOut(BaseModel):
         return cls(id=d.id, name=d.name, file_type=d.file_type, size=d.size, topic=d.topic,
                    status=d.status, chunk_count=d.chunk_count, error_message=d.error_message,
                    uploaded_at=d.uploaded_at.strftime("%Y-%m-%d %H:%M"))
+
+
+class RenameBody(BaseModel):
+    name: str
 
 
 @router.post("/documents")
@@ -88,6 +93,49 @@ def list_documents() -> dict:
         docs = s.query(Document).order_by(Document.uploaded_at.desc()).all()
         items = [DocumentOut.of(d).model_dump() for d in docs]
         return {"total": len(items), "total_chunks": sum(d["chunk_count"] for d in items), "items": items}
+
+
+@router.get("/documents/{doc_id}")
+def document_detail(doc_id: int) -> dict:
+    with session_scope() as s:
+        d = s.get(Document, doc_id)
+        if d is None:
+            raise HTTPException(status_code=404, detail="文档不存在")
+        return DocumentOut.of(d).model_dump() | {"stored_file": Path(d.stored_path).name}
+
+
+@router.get("/documents/{doc_id}/download")
+def document_download(doc_id: int) -> FileResponse:
+    with session_scope() as s:
+        d = s.get(Document, doc_id)
+        if d is None:
+            raise HTTPException(status_code=404, detail="文档不存在")
+        p = Path(d.stored_path).resolve()
+        if not str(p).startswith(str(UPLOAD_DIR.resolve())):
+            raise HTTPException(status_code=500, detail="存储路径异常")   # 防穿越兜底
+        if not p.is_file():
+            raise HTTPException(status_code=404, detail="源文件缺失")
+        return FileResponse(p, filename=d.name)
+
+
+@router.put("/documents/{doc_id}")
+def rename_document(doc_id: int, body: RenameBody) -> dict:
+    new_name = Path(body.name).name
+    ext = new_name.rsplit(".", 1)[-1].lower() if "." in new_name else ""
+    if ext not in SUPPORTED_EXTS:
+        raise HTTPException(status_code=400, detail=f"不支持的文件格式：.{ext}")
+    with session_scope() as s:
+        d = s.get(Document, doc_id)
+        if d is None:
+            raise HTTPException(status_code=404, detail="文档不存在")
+        # 与上传不同：重命名校验覆盖全部记录（含失败态）——原记录名称仍被占用即拒绝，
+        # 避免列表出现两条同名（规格 P0-6 名称唯一性）
+        dup = s.query(Document).filter(Document.name == new_name,
+                                       Document.id != doc_id).first()
+        if dup is not None:
+            raise HTTPException(status_code=409, detail=f"已存在同名文档《{new_name}》")
+        d.name = new_name
+        return DocumentOut.of(d).model_dump()
 
 
 @router.get("/documents/{doc_id}/parse-status")

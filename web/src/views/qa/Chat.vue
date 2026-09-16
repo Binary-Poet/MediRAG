@@ -2,6 +2,7 @@
 // 阶段 3 回答态：SSE 打字机（token 流式）+ 空态 5 常用问题卡片 + 溯源弹窗随 step 事件逐步点亮
 // 规格 P0-2 空态 / P0-3 回答态 / P0-4 溯源弹窗
 import { nextTick, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { streamChat } from '../../api/chat'
 import { theme } from '../../styles/theme'
 import type { GraphFact, Reference, StepEvent } from '../../types/chat'
@@ -14,6 +15,7 @@ interface QA {
   graphFacts: GraphFact[]
   safety: { type: string; message: string } | null
   trace: StepEvent[]
+  feedback?: boolean
 }
 
 const suggestions = [
@@ -92,6 +94,21 @@ async function send(q?: string) {
 function openTrace(t: StepEvent[]) {
   currentTrace.value = t
   traceVisible.value = true
+}
+
+/** 有用/无用反馈：先乐观置位并禁用两按钮，提交失败则回退允许重试（规格 P1 反馈入口）。 */
+async function sendFeedback(m: QA, useful: boolean) {
+  m.feedback = useful
+  try {
+    const resp = await fetch('/api/feedback', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, useful }),
+    })
+    if (!resp.ok) throw new Error(`反馈提交失败（${resp.status}）`)
+  } catch (e) {
+    m.feedback = undefined
+    ElMessage.error((e as Error).message)
+  }
 }
 
 /** Enter 发送 / Shift+Enter 换行；IME 组合中（isComposing 或 keyCode 229）不触发 */
@@ -178,6 +195,15 @@ function onEnter(e: KeyboardEvent) {
               </div>
             </el-collapse-item>
           </el-collapse>
+
+          <!-- 有用/无用反馈（规格 P1 入口） -->
+          <div v-if="m.answer" class="feedback">
+            <span class="fb-label">此回答有帮助吗？</span>
+            <el-button link size="small" :type="m.feedback === true ? 'primary' : ''"
+                       :disabled="m.feedback !== undefined" @click="sendFeedback(m, true)">有用</el-button>
+            <el-button link size="small" :type="m.feedback === false ? 'danger' : ''"
+                       :disabled="m.feedback !== undefined" @click="sendFeedback(m, false)">无用</el-button>
+          </div>
         </el-card>
       </div>
     </div>
@@ -396,6 +422,18 @@ function onEnter(e: KeyboardEvent) {
 .refs {
   margin-top: 12px;
   border-top: 1px dashed v-bind(theme.borderColor);
+}
+
+.feedback {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.fb-label {
+  color: v-bind(theme.textColorMuted);
 }
 
 .ref-item {

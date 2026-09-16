@@ -2,10 +2,10 @@
 // 本草图谱：左实体列表 + 中 ECharts 力导向图 + 右详情；候选审核 Tab（规格 P0-5）
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { theme } from '../../styles/theme'
 import type { GraphEntity, GraphLink, GraphNode } from '../../types/graph'
-import { getEntityDetail, getNeighbors, searchEntities } from '../../api/graph'
+import { getEntityDetail, getNeighbors, reimportGraph, searchEntities } from '../../api/graph'
 import CandidateReview from './CandidateReview.vue'
 
 const TYPE_COLOR: Record<string, string> = {
@@ -31,6 +31,21 @@ async function doSearch() {
     const res = await searchEntities(keyword.value, typeFilter.value)
     entities.value = res.items
   } catch (e) { ElMessage.error((e as Error).message) }
+}
+
+async function doReimport() {
+  try {
+    await ElMessageBox.confirm('将以内置演示数据重新导入图谱（幂等，不覆盖已发布/候选状态）。', '重新导入', { type: 'warning' })
+  } catch {
+    return // 用户取消
+  }
+  try {
+    const r = await reimportGraph()
+    ElMessage.success(`已导入 ${r.imported.nodes} 节点 / ${r.imported.edges} 关系`)
+    doSearch()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
 }
 
 async function focusEntity(name: string) {
@@ -101,7 +116,7 @@ onUnmounted(() => {
         <el-option v-for="t in TYPES" :key="t" :label="t" :value="t" />
       </el-select>
       <el-button type="primary" @click="doSearch">查询</el-button>
-      <el-button link type="primary">重新导入基础数据</el-button>
+      <el-button link type="primary" @click="doReimport">重新导入基础数据</el-button>
     </div>
 
     <el-tabs v-model="activeTab" class="graph-tabs">

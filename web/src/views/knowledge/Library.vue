@@ -4,7 +4,8 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { DocItem } from '../../types/knowledge'
 import { TOPICS } from '../../types/knowledge'
-import { humanSize, listDocuments, parseStatus } from '../../api/documents'
+import { humanSize, listDocuments, parseStatus, getDocument, downloadUrl, renameDocument } from '../../api/documents'
+import type { DocDetail } from '../../api/documents'
 import { theme } from '../../styles/theme'
 import UploadDialog from './UploadDialog.vue'
 
@@ -13,6 +14,8 @@ const total = ref(0)
 const totalChunks = ref(0)
 const filterTopic = ref('')
 const showUpload = ref(false)
+const detailVisible = ref(false)
+const detailDoc = ref<DocDetail | null>(null)
 let timer: number | undefined
 
 const filtered = computed(() =>
@@ -61,6 +64,55 @@ async function removeDoc(d: DocItem) {
   refresh()
 }
 
+async function showDetail(d: DocItem) {
+  try {
+    const res = await getDocument(d.id)
+    detailDoc.value = res
+    detailVisible.value = true
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
+function download(d: DocItem) {
+  // 临时 a 标签触发 attachment 下载（后端已设 Content-Disposition filename=原名）
+  const a = document.createElement('a')
+  a.href = downloadUrl(d.id)
+  a.download = d.name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
+async function rename(d: DocItem) {
+  let value: string
+  try {
+    const r = await ElMessageBox.prompt('请输入新名称', '重命名', {
+      inputValue: d.name,
+      inputPattern: /\S+/,
+      inputErrorMessage: '名称不能为空',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+    })
+    value = r.value.trim()
+  } catch {
+    return // 用户取消
+  }
+  // 校验：保留原文件后缀
+  const extOf = (n: string) => (n.includes('.') ? n.slice(n.lastIndexOf('.') + 1).toLowerCase() : '')
+  if (extOf(value) !== extOf(d.name)) {
+    ElMessage.warning(`请保留文件后缀 .${extOf(d.name)}`)
+    return
+  }
+  try {
+    await renameDocument(d.id, value)
+    ElMessage.success('已重命名')
+    refresh()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
 onMounted(() => { refresh(); timer = window.setInterval(pollPending, 2000) })
 onUnmounted(() => window.clearInterval(timer))
 </script>
@@ -105,8 +157,11 @@ onUnmounted(() => window.clearInterval(timer))
         <el-table-column prop="topic" label="知识主题" width="110" />
         <el-table-column prop="chunk_count" label="切片数" width="90" />
         <el-table-column prop="uploaded_at" label="上传时间" width="150" />
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="showDetail(row)">详情</el-button>
+            <el-button link type="primary" size="small" @click="download(row)">下载</el-button>
+            <el-button link type="primary" size="small" @click="rename(row)">重命名</el-button>
             <el-button link type="danger" size="small" @click="removeDoc(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -114,6 +169,24 @@ onUnmounted(() => window.clearInterval(timer))
     </el-card>
 
     <UploadDialog v-model:visible="showUpload" @uploaded="refresh" />
+
+    <el-dialog v-model="detailVisible" title="文档详情" width="520px">
+      <el-descriptions v-if="detailDoc" :column="1" border size="small">
+        <el-descriptions-item label="名称">{{ detailDoc.name }}</el-descriptions-item>
+        <el-descriptions-item label="知识主题">{{ detailDoc.topic }}</el-descriptions-item>
+        <el-descriptions-item label="格式">{{ detailDoc.file_type }}</el-descriptions-item>
+        <el-descriptions-item label="大小">{{ humanSize(detailDoc.size) }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="STATUS_TAG[detailDoc.status]" size="small">{{ detailDoc.status }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="切片数">{{ detailDoc.chunk_count }}</el-descriptions-item>
+        <el-descriptions-item label="上传时间">{{ detailDoc.uploaded_at }}</el-descriptions-item>
+        <el-descriptions-item label="来源文件">{{ detailDoc.stored_file }}</el-descriptions-item>
+        <el-descriptions-item v-if="detailDoc.error_message" label="错误信息">
+          {{ detailDoc.error_message }}
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-dialog>
   </div>
 </template>
 
