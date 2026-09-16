@@ -224,6 +224,20 @@ onMounted(() => {
   position: relative;
 }
 
+.sl-item-icon::before {
+  /* 气泡内的三枚省略点：一枚实心点 + 两枚 box-shadow 副本，避免三个 DOM 节点 */
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  margin: -1.5px 0 0 -5.5px;
+  border-radius: 50%;
+  background: v-bind(theme.borderColor);
+  box-shadow: 4px 0 0 v-bind(theme.borderColor), 8px 0 0 v-bind(theme.borderColor);
+}
+
 .sl-item-icon::after {
   /* 气泡尾巴：只画两条边、透明填充，任何背景色（含 hover/选中态）下都不会露色块 */
   content: '';
