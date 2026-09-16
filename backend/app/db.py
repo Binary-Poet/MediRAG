@@ -70,7 +70,7 @@ def _seed_users(engine) -> None:
 
 def init_db(engine=None) -> None:
     """建表（幂等）+ 演示账号 seed。应用启动时调用。"""
-    from app.models import document, feedback, inference_config, retrieval_log, user  # noqa: F401  确保模型注册到 Base
+    from app.models import chat, document, feedback, inference_config, retrieval_log, user  # noqa: F401  确保模型注册到 Base
 
     eng = engine or get_engine()
     Base.metadata.create_all(eng)
