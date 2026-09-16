@@ -1,12 +1,15 @@
 <script setup lang="ts">
 // 本草图谱：左实体列表 + 中 ECharts 力导向图 + 右详情；候选审核 Tab（规格 P0-5）
 import { onMounted, onUnmounted, ref, watch } from 'vue'
-import * as echarts from 'echarts'
+import { init, type ECharts } from 'echarts/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { theme } from '../../styles/theme'
+import { regGraph } from '../../utils/echarts'
 import type { GraphEntity, GraphLink, GraphNode } from '../../types/graph'
 import { getEntityDetail, getNeighbors, reimportGraph, searchEntities } from '../../api/graph'
 import CandidateReview from './CandidateReview.vue'
+
+regGraph()
 
 const TYPE_COLOR: Record<string, string> = {
   方剂: theme.nodeFormula, 中药: theme.nodeHerb, 证候: theme.nodeSyndrome,
@@ -21,7 +24,7 @@ const selected = ref<GraphEntity | null>(null)
 const detail = ref<(GraphEntity & { desc: string; source: string }) | null>(null)
 const chartRef = ref<HTMLElement>()
 const chartReady = ref(false)
-let chart: echarts.ECharts | undefined
+let chart: ECharts | undefined
 let resizeTimer: number | undefined
 
 const TYPES = ['方剂', '中药', '证候', '症状', '功效', '禁忌']
@@ -60,7 +63,7 @@ async function focusEntity(name: string) {
 function renderGraph(nodes: GraphNode[], links: GraphLink[]) {
   if (!chartRef.value) return
   if (!chart) {
-    chart = echarts.init(chartRef.value)
+    chart = init(chartRef.value)
     chartReady.value = true
     // 点节点联动左列表与右详情（规格 P0-5 交互验收①）；只注册一次，避免重复叠加
     chart.on('click', (p) => {
