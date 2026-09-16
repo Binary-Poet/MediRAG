@@ -34,6 +34,12 @@ function resetOne(key: keyof InferenceConfig) {
 }
 
 async function save() {
+  // el-input-number 清空失焦会写回 null，若直接提交会被后端 422 拒绝；
+  // 在前端先拦截，避免发出无效请求。
+  if ((Object.values(form) as unknown[]).some((v) => v === null || v === undefined || v === '')) {
+    ElMessage.error('请填写完整配置')
+    return
+  }
   saving.value = true
   try {
     const saved = await saveConfig({ ...form })

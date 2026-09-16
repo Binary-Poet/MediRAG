@@ -17,8 +17,20 @@ export async function saveConfig(body: InferenceConfig): Promise<InferenceConfig
     body: JSON.stringify(body),
   })
   if (!resp.ok) {
-    const detail = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }))
-    throw new Error(detail.detail ?? '保存失败')
+    // 后端 422 的 detail 可能是数组（逐字段校验错误），需拼成可读文案，
+    // 否则直接 String(detail) 会得到 "[object Object]"。
+    const body = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }))
+    const d = (body as { detail?: unknown }).detail
+    const msg = Array.isArray(d)
+      ? (d as Array<{ loc?: unknown[]; msg?: unknown }>)
+          .map((x) => {
+            const loc = x?.loc
+            const field = loc && loc.length ? loc[loc.length - 1] : '字段'
+            return `${field}: ${x?.msg ?? '非法值'}`
+          })
+          .join('；')
+      : (d ?? '保存失败')
+    throw new Error(String(msg))
   }
   return resp.json()
 }
