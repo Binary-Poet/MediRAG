@@ -9,8 +9,14 @@ import app.db as dbmod
 @pytest.fixture(autouse=True)
 def _db(monkeypatch):
     eng = dbmod._make_engine("sqlite:///:memory:")
-    dbmod.Base.metadata.create_all(eng)
+    dbmod.init_db(eng)                      # 建表 + seed 三用户（登录取 Bearer 用）
     monkeypatch.setattr(dbmod, "_engine", eng)
+
+
+def _auth(client) -> dict:
+    tok = client.post("/api/auth/login",
+                      json={"username": "admin", "password": "admin123"}).json()["token"]
+    return {"Authorization": f"Bearer {tok}"}
 
 
 def _patch_agent(client, monkeypatch, *, safety="ok", answer=None, safety_message=""):
@@ -46,7 +52,7 @@ def _patch_agent(client, monkeypatch, *, safety="ok", answer=None, safety_messag
 
 def test_stream_emits_expected_events(client, monkeypatch):
     fake = _patch_agent(client, monkeypatch)
-    with client.stream("POST", "/api/chat/stream", json={"question": "四君子汤由哪些中药组成？"}) as resp:
+    with client.stream("POST", "/api/chat/stream", json={"question": "四君子汤由哪些中药组成？"}, headers=_auth(client)) as resp:
         assert resp.status_code == 200
         raw = "".join(resp.iter_text())
     # 事件顺序：step...、token、references、safety、done
@@ -60,7 +66,7 @@ def test_stream_emits_expected_events(client, monkeypatch):
 def test_stream_low_confidence_emits_safety_and_fallback_text(client, monkeypatch):
     _patch_agent(client, monkeypatch, safety="low_confidence",
                  safety_message="知识库中未检索到可靠依据。", answer="知识库中未检索到可靠依据。")
-    with client.stream("POST", "/api/chat/stream", json={"question": "今天天气"}) as resp:
+    with client.stream("POST", "/api/chat/stream", json={"question": "今天天气"}, headers=_auth(client)) as resp:
         raw = "".join(resp.iter_text())
     assert '"type": "low_confidence"' in raw
     assert "知识库中未检索到可靠依据" in raw
@@ -70,7 +76,7 @@ def test_stream_low_confidence_emits_no_token_event(client, monkeypatch):
     # 低置信分支无 LLM 生成：只发 safety，不发 token（前端以框渲染兜底话术）
     _patch_agent(client, monkeypatch, safety="low_confidence",
                  safety_message="知识库中未检索到可靠依据。", answer="知识库中未检索到可靠依据。")
-    with client.stream("POST", "/api/chat/stream", json={"question": "今天天气"}) as resp:
+    with client.stream("POST", "/api/chat/stream", json={"question": "今天天气"}, headers=_auth(client)) as resp:
         raw = "".join(resp.iter_text())
     assert "event: safety" in raw
     assert "event: token" not in raw
@@ -87,14 +93,14 @@ def test_stream_emergency_injects_emergency_system_prompt(client, monkeypatch):
         yield "请立即就医"
 
     monkeypatch.setattr(chatmod, "chat_completion_stream", _cap)
-    with client.stream("POST", "/api/chat/stream", json={"question": "我胸痛"}) as resp:
+    with client.stream("POST", "/api/chat/stream", json={"question": "我胸痛"}, headers=_auth(client)) as resp:
         raw = "".join(resp.iter_text())
     assert '"type": "emergency"' in raw
     assert "120" in seen["system"]
 
 
 def test_stream_empty_question_rejected(client):
-    resp = client.post("/api/chat/stream", json={"question": ""})
+    resp = client.post("/api/chat/stream", json={"question": ""}, headers=_auth(client))
     assert resp.status_code == 422
 
 
@@ -106,7 +112,7 @@ def test_stream_generation_error_emits_error_event(client, monkeypatch):
         yield  # pragma: no cover
 
     monkeypatch.setattr(chatmod, "chat_completion_stream", _boom)
-    with client.stream("POST", "/api/chat/stream", json={"question": "四君子汤组成"}) as resp:
+    with client.stream("POST", "/api/chat/stream", json={"question": "四君子汤组成"}, headers=_auth(client)) as resp:
         assert resp.status_code == 200
         raw = "".join(resp.iter_text())
     assert "event: error" in raw
@@ -118,8 +124,49 @@ def test_stream_graph_error_emits_error_event(client, monkeypatch):
     fake_graph = MagicMock()
     fake_graph.stream.side_effect = ValueError("图执行失败")
     monkeypatch.setattr(chatmod, "get_agent", lambda: fake_graph)
-    with client.stream("POST", "/api/chat/stream", json={"question": "四君子汤组成"}) as resp:
+    with client.stream("POST", "/api/chat/stream", json={"question": "四君子汤组成"}, headers=_auth(client)) as resp:
         assert resp.status_code == 200
         raw = "".join(resp.iter_text())
     assert "event: error" in raw
     assert "图执行失败" in raw
+
+
+def test_stream_persists_turn_and_claims_session(client, monkeypatch):
+    """本轮问答落库：done 返回的 message_id 即会话 id，且消息可回放。"""
+    import json as _json
+
+    from app.db import session_scope
+    from app.models.chat import ChatMessage, ChatSession
+    from app.services import chat_session as cs
+
+    _patch_agent(client, monkeypatch)
+    with client.stream("POST", "/api/chat/stream",
+                       json={"question": "四君子汤由哪些中药组成？"},
+                       headers=_auth(client)) as resp:
+        raw = "".join(resp.iter_text())
+    done = [ln for ln in raw.splitlines() if ln.startswith("data:") and "message_id" in ln][0]
+    sid = _json.loads(done[len("data:"):].strip())["message_id"]
+
+    with session_scope() as s:
+        assert s.get(ChatSession, sid).title == "四君子汤由哪些中药组成？"
+        msgs = s.query(ChatMessage).filter_by(session_id=sid).order_by(ChatMessage.seq).all()
+    assert [m.role for m in msgs] == ["user", "assistant"]
+    assert msgs[0].payload is None
+    assert msgs[1].payload["graph_facts"][0]["target"] == "人参"
+    assert msgs[1].payload["safety"] is None
+    assert cs.load_messages(sid, 1) is not None
+
+
+def test_stream_rejects_foreign_session(client, monkeypatch):
+    """带上不属于自己的 session_id → 404，不能往他人会话灌消息。"""
+    from app.services import chat_session as cs
+
+    _patch_agent(client, monkeypatch)
+    foreign = cs.create_session(2, "user1 的会话")
+    r = client.post("/api/chat/stream", json={"question": "问", "session_id": foreign},
+                    headers=_auth(client))       # admin 的 token，id=1
+    assert r.status_code == 404
+
+
+def test_stream_requires_auth(client):
+    assert client.post("/api/chat/stream", json={"question": "问"}).status_code == 401

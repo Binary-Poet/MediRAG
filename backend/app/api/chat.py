@@ -1,16 +1,19 @@
 """SSE 流式问答接口（合并方案 4.3 事件协议）。"""
 import json
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.agent.memory import get_history, new_session, upsert_message
+from app.agent.memory import get_history
 from app.agent.nodes.safety import LOW_CONFIDENCE_MESSAGE
 from app.agent.workflow import get_agent
+from app.api.auth import current_user
 from app.db import session_scope
 from app.llm.chat import chat_completion_stream
 from app.models.retrieval_log import RetrievalLog
+from app.models.user import User
+from app.services import chat_session
 from app.services.inference_config import defaults, load_inference_config
 
 router = APIRouter()
@@ -26,14 +29,14 @@ def sse(event: str, data: dict | str) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
-def _initial_state(body: StreamBody, session_id: str) -> dict:
+def _initial_state(body: StreamBody, session_id: str, history: list[dict]) -> dict:
     try:
         cfg = load_inference_config()
     except Exception:
         cfg = defaults()  # DB 不可达时回落默认，主聊天端点不因日志/配置库故障 500
     return {
         "question": body.question, "session_id": session_id,
-        "chat_history": get_history(session_id), "rewritten_query": body.question,
+        "chat_history": history, "rewritten_query": body.question,
         "entities": [], "entity_names": [], "intent": "", "plan": [],
         "vector_hits": [], "keyword_hits": [], "graph_facts": [], "fused": [],
         "evidence": [], "confidence": 0.0, "low_confidence": False, "reflect_count": 0,
@@ -62,10 +65,16 @@ def _log_retrieval(session_id: str, final: dict) -> None:
 
 
 @router.post("/chat/stream")
-def chat_stream(body: StreamBody) -> StreamingResponse:
-    session_id = body.session_id or new_session()
+def chat_stream(body: StreamBody, user: User = Depends(current_user)) -> StreamingResponse:
+    # 归属校验：带上他人的 session_id 会被拒，否则可往别人的会话里灌消息
+    if body.session_id and not chat_session.owns(body.session_id, user.id):
+        raise HTTPException(status_code=404, detail="会话不存在")
+    session_id = body.session_id or chat_session.create_session(user.id, body.question)
+    # 顺序不可颠倒：先取历史再写当前提问，否则当前问题会重复进入 chat_history
+    history = get_history(session_id)
+    chat_session.append_message(session_id, "user", body.question)
     graph = get_agent()
-    initial = _initial_state(body, session_id)
+    initial = _initial_state(body, session_id, history)
 
     def gen():
         final = dict(initial)
@@ -99,11 +108,11 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
                                                     model=cfg.get("model")):
                     collected.append(chunk)
                     yield sse("token", {"text": chunk})
-                final["answer"] = "".join(collected)
+                answer_text = "".join(collected)
             elif final["safety_flag"] == "low_confidence":
                 # 低置信分支无 LLM 生成：只发 safety 事件，前端以框渲染兜底话术
-                msg = final["safety_message"] or final["answer"] or LOW_CONFIDENCE_MESSAGE
-                yield sse("safety", {"type": "low_confidence", "message": msg})
+                answer_text = final["safety_message"] or final["answer"] or LOW_CONFIDENCE_MESSAGE
+                yield sse("safety", {"type": "low_confidence", "message": answer_text})
             else:
                 collected = []
                 cfg = final.get("inference") or {}
@@ -112,10 +121,12 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
                                                     model=cfg.get("model")):
                     collected.append(chunk)
                     yield sse("token", {"text": chunk})
-                final["answer"] = "".join(collected)
+                answer_text = "".join(collected)
         except Exception as e:  # 生成阶段异常收口：LLM/网络错误 → 显式 error 事件
             yield sse("error", {"detail": f"生成阶段失败：{e}"})
             return
+
+        final["answer"] = answer_text
 
         refs = [
             {"chunk_id": c["chunk_id"], "title": c["title"], "doc_name": c["doc_name"],
@@ -123,6 +134,15 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
             for c in final["evidence"]
         ]
         yield sse("references", {"docs": refs, "graph_facts": final["graph_facts"]})
+
+        # 先落库再发 done：前端收到 done 即刷新会话列表，反序会读到未写完的条数
+        chat_session.append_message(session_id, "assistant", answer_text, payload={
+            "trace": final.get("trace", []),
+            "references": refs,
+            "graph_facts": final.get("graph_facts", []),
+            "safety": ({"type": final["safety_flag"], "message": final.get("safety_message", "")}
+                       if final.get("safety_flag") not in (None, "ok") else None),
+        })
 
         _log_retrieval(session_id, final)
 
@@ -132,9 +152,5 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
             "evidence_n": len(final["evidence"]),
             "reflect_count": final.get("reflect_count", 0),
         }})
-
-        upsert_message(session_id, "user", body.question)
-        if final["answer"]:
-            upsert_message(session_id, "assistant", final["answer"])
 
     return StreamingResponse(gen(), media_type="text/event-stream")

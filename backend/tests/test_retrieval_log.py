@@ -7,6 +7,7 @@ import app.db as dbmod
 from app.db import session_scope
 from app.models.retrieval_log import RetrievalLog
 from app.models.feedback import Feedback
+from app.services import chat_session as cs
 
 
 @pytest.fixture(autouse=True)
@@ -24,6 +25,8 @@ def _auth(client) -> dict:
 
 
 def test_chat_stream_writes_retrieval_log(client, monkeypatch):
+    headers = _auth(client)
+    sid = cs.create_session(1, "四君子汤由哪些中药组成？")   # admin 的 id=1
     fake = {"intent": "relation", "plan": ["vector_search"], "vector_hits": [],
             "keyword_hits": [], "graph_facts": [], "fused": [], "evidence": [
                 {"chunk_id": "c1", "title": "t", "doc_name": "d", "chapter": "",
@@ -48,11 +51,12 @@ def test_chat_stream_writes_retrieval_log(client, monkeypatch):
     monkeypatch.setattr("app.api.chat.chat_completion_stream",
                         lambda system, user, temperature=0.3, vendor=None, model=None: iter(["流"]))
     r = client.post("/api/chat/stream",
-                    json={"question": "四君子汤由哪些中药组成？", "session_id": "sess-1"})
+                    json={"question": "四君子汤由哪些中药组成？", "session_id": sid},
+                    headers=headers)
     assert r.status_code == 200
     with session_scope() as s:
         log = s.execute(select(RetrievalLog)).scalar_one()
-        assert log.session_id == "sess-1" and log.intent == "relation"
+        assert log.session_id == sid and log.intent == "relation"
         assert log.evidence_n == 1
         assert log.is_fallback is False
     # 初始 state 已注入推理配置（保存即生效）
@@ -61,6 +65,9 @@ def test_chat_stream_writes_retrieval_log(client, monkeypatch):
 
 
 def test_fallback_marks_is_fallback(client, monkeypatch):
+    headers = _auth(client)
+    sid = cs.create_session(1, "今天北京天气")
+
     class FakeGraph:
         def stream(self, initial, stream_mode=None):
             yield {"understand": {"trace": []}}
@@ -69,11 +76,12 @@ def test_fallback_marks_is_fallback(client, monkeypatch):
                               "safety_message": "知识库中未检索到可靠依据",
                               "answer": "知识库中未检索到可靠依据"}}
     monkeypatch.setattr(chatmod, "get_agent", lambda: FakeGraph())
-    r = client.post("/api/chat/stream", json={"question": "今天北京天气", "session_id": "sess-2"})
+    r = client.post("/api/chat/stream", json={"question": "今天北京天气", "session_id": sid},
+                    headers=headers)
     assert r.status_code == 200
     with session_scope() as s:
         log = s.execute(select(RetrievalLog)).scalar_one()
-        assert log.session_id == "sess-2"
+        assert log.session_id == sid
         assert log.is_fallback is True
 
 
@@ -96,6 +104,8 @@ def test_feedback_api(client):
 
 def test_saved_config_reaches_llm_call(client, monkeypatch):
     from app.models.inference_config import InferenceConfig
+    headers = _auth(client)
+    sid = cs.create_session(1, "四君子汤组成")
     with session_scope() as s:
         s.add(InferenceConfig(id=1, model="qwen-plus", answer_temp=0.7))
     class FakeGraph:
@@ -113,7 +123,8 @@ def test_saved_config_reaches_llm_call(client, monkeypatch):
     monkeypatch.setattr(chatmod, "chat_completion_stream",
                         lambda system, user, temperature=0.3, vendor=None, model=None,
                         **kw: captured.append((temperature, model)) or iter(["流"]))
-    r = client.post("/api/chat/stream", json={"question": "四君子汤组成", "session_id": "sess-3"})
+    r = client.post("/api/chat/stream", json={"question": "四君子汤组成", "session_id": sid},
+                    headers=headers)
     assert r.status_code == 200
     # 保存的配置到达 LLM 调用（生成段 temperature/model 转发）
     assert captured[0] == (0.7, "qwen-plus")
