@@ -2,10 +2,15 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.graph.extractor import VALID_RELATIONS
 from app.graph.importer import import_seed
 from app.graph.neo4j_client import get_graph
 
 router = APIRouter()
+
+# 2-hop 语义关系白名单：由抽取侧唯一真源 VALID_RELATIONS 构造（可信 Python 常量，无注入面；
+# sorted 保证 Cypher 文本跨进程稳定——set 迭代序受 PYTHONHASHSEED 影响）。
+_RELATIONS_LITERAL = ",".join(f"'{r}'" for r in sorted(VALID_RELATIONS))
 
 
 def _read(cypher: str, **params) -> list[dict]:
@@ -34,10 +39,10 @@ def search_entities(entity: str = "", type: str = "") -> dict:
 @router.get("/graph/neighbors")
 def neighbors(name: str, hop: int = 2) -> dict:
     hop = min(max(int(hop), 1), 2)
-    # 阶段 5：2-hop 扩展收紧——中间边只允许语义关系白名单（关系名为中文常量，无注入风险）
+    # 阶段 5：2-hop 扩展收紧——中间边只允许语义关系白名单（由 VALID_RELATIONS 构造，无注入风险）
     rows = _read(
         f"MATCH p = (a)-[*1..{hop}]-(b) WHERE a.name = $name "
-        "AND ALL(r IN relationships(p) WHERE type(r) IN ['组成','主治','功效','禁忌','表现']) "
+        f"AND ALL(r IN relationships(p) WHERE type(r) IN [{_RELATIONS_LITERAL}]) "
         "UNWIND relationships(p) AS r "
         "RETURN DISTINCT startNode(r).name AS source, type(r) AS relation, endNode(r).name AS target, "
         "startNode(r).type AS source_type, endNode(r).type AS target_type, "

@@ -1,25 +1,43 @@
-"""图谱 re-import 端点（幂等）；neighbors 去重与 2-hop 白名单过滤（fake graph）。"""
-import pytest
-
+"""图谱 re-import 端点（真实 seed 驱动的幂等）；neighbors 去重与 2-hop 白名单过滤（fake graph）。"""
 from app.api import graph_api
-from app.graph.importer import import_seed
+from app.graph import importer
+from app.graph.extractor import VALID_RELATIONS
 
 
-class FakeWriteGraph:
+class RecordingGraph:
+    """记录 execute_write 的 (cypher, params) 序列，不连 Neo4j。"""
+
     def __init__(self):
-        self.calls = 0
+        self.calls: list[tuple] = []
 
-    def execute_write(self, cypher: str, **params):
-        self.calls += 1
+    def execute_write(self, cypher: str, **params) -> None:
+        self.calls.append((cypher, tuple(sorted(params.items()))))
 
 
-def test_reimport_calls_seed(monkeypatch):
-    api = FakeWriteGraph()
-    monkeypatch.setattr(graph_api, "get_graph", lambda: api)
-    monkeypatch.setattr("app.api.graph_api.import_seed", lambda *a, **k: {"nodes": 33, "edges": 32})
-    r = graph_api.reimport()
-    assert r["imported"]["nodes"] == 33
-    assert api.calls == 0  # 幂等 seed 走 import_seed 自身的 MERGE，不额外写
+def test_import_seed_idempotent_statements(monkeypatch):
+    """真实 import_seed 连跑两轮，MERGE 语句序列必须逐字一致（幂等性非恒真断言）。"""
+    g = RecordingGraph()
+    monkeypatch.setattr(importer, "get_graph", lambda: g)
+    stats = importer.import_seed()
+    first = list(g.calls)
+    g.calls.clear()
+    importer.import_seed()
+    assert g.calls == first            # 第二轮语句序列与第一轮一致（幂等）
+    assert stats == {"nodes": 33, "edges": 32}
+
+
+def test_reimport_endpoint_returns_imported_counts(client, monkeypatch):
+    """POST /api/graph/import 契约：200 + {"imported":{nodes,edges}}。
+
+    经 importer.get_graph 注入 RecordingGraph，驱动真实 import_seed（不连 Neo4j）；
+    语句级幂等由 test_import_seed_idempotent_statements 覆盖。
+    """
+    g = RecordingGraph()
+    monkeypatch.setattr(importer, "get_graph", lambda: g)
+    r = client.post("/api/graph/import")
+    assert r.status_code == 200
+    assert r.json() == {"imported": {"nodes": 33, "edges": 32}}
+    assert g.calls  # 端点确实驱动了 seed 写入
 
 
 def _rows(hop):
@@ -58,12 +76,7 @@ def test_neighbors_dedup_and_filter(monkeypatch):
     # 候选边不进入 result
     assert all(l["status"] == "已发布" for l in r["links"])
     assert "大补元气" not in [n["name"] for n in r["nodes"]]
-
-
-def test_reimport_idempotent_via_testclient(client, monkeypatch):
-    monkeypatch.setattr("app.api.graph_api.import_seed",
-                        lambda *a, **k: {"nodes": 33, "edges": 32})
-    r1 = client.post("/api/graph/import")
-    r2 = client.post("/api/graph/import")
-    assert r1.status_code == 200 and r2.status_code == 200
-    assert r1.json() == r2.json()
+    # 2-hop 关系白名单 Cypher 守卫（字符串层面防白名单/语法回归）
+    assert "ALL(r IN relationships(p)" in captured["cypher"] and "'组成'" in captured["cypher"]
+    # 白名单须由 VALID_RELATIONS 全量构造（防退回硬编码列表导致「抽取侧加关系、浏览侧静默失联」）
+    assert all(f"'{rel}'" in captured["cypher"] for rel in VALID_RELATIONS)
