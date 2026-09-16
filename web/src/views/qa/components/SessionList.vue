@@ -162,10 +162,10 @@ onMounted(() => {
 
 .sl-tabs {
   display: flex;
-  gap: 2px;
-  padding: 3px;
-  margin: 0 14px 10px;
-  border-radius: 8px;
+  gap: 6px;
+  padding: 10px;
+  margin: 0 0 10px;
+  border-radius: 0;
   background: v-bind(theme.pageBg);
 }
 
