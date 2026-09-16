@@ -91,6 +91,7 @@ onMounted(() => {
         :class="{ on: store.activeId === s.session_id }"
         @click="emit('select', s.session_id)"
       >
+        <span class="sl-item-icon" aria-hidden="true" />
         <div class="sl-item-main">
           <div class="sl-item-title">{{ s.title }}</div>
           <div class="sl-item-meta">{{ relativeTime(s.updated_at) }} · {{ s.message_count }}条</div>
@@ -161,8 +162,11 @@ onMounted(() => {
 
 .sl-tabs {
   display: flex;
-  gap: 6px;
-  padding: 0 14px 10px;
+  gap: 2px;
+  padding: 3px;
+  margin: 0 14px 10px;
+  border-radius: 8px;
+  background: v-bind(theme.pageBg);
 }
 
 .sl-tab {
@@ -170,18 +174,18 @@ onMounted(() => {
   font-size: 13px;
   font-family: inherit;
   padding: 6px 0;
+  border: none;
   border-radius: 6px;
-  border: 1px solid v-bind(theme.borderColor);
-  background: v-bind(theme.cardBg);
+  background: transparent;
   color: v-bind(theme.textColorSecondary);
   cursor: pointer;
 }
 
 .sl-tab.on {
-  border-color: v-bind(theme.colorPrimary);
+  background: v-bind(theme.cardBg);
   color: v-bind(theme.colorPrimary);
-  background: v-bind(theme.hoverBg);
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .sl-items {
@@ -193,7 +197,7 @@ onMounted(() => {
 .sl-item {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   padding: 10px;
   border-radius: 8px;
   border: 1px solid transparent;
@@ -208,6 +212,29 @@ onMounted(() => {
 .sl-item.on {
   border-color: v-bind(theme.colorPrimary);
   background: v-bind(theme.hoverBg);
+}
+
+/* 前置对话气泡图标（规格 P0-2 会话项）：圆环 + 左下小尾巴，纯 CSS，无图标库依赖 */
+.sl-item-icon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid v-bind(theme.borderColor);
+  position: relative;
+}
+
+.sl-item-icon::after {
+  /* 气泡尾巴：只画两条边、透明填充，任何背景色（含 hover/选中态）下都不会露色块 */
+  content: '';
+  position: absolute;
+  left: 1px;
+  bottom: -2px;
+  width: 6px;
+  height: 6px;
+  border-left: 1.5px solid v-bind(theme.borderColor);
+  border-bottom: 1.5px solid v-bind(theme.borderColor);
+  transform: rotate(-45deg);
 }
 
 .sl-item-main {
