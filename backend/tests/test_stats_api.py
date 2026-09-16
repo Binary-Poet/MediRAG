@@ -69,6 +69,12 @@ def test_overview_aggregates(client):
 def test_overview_empty(client):
     r = client.get("/api/stats/overview")
     assert r.status_code == 200
-    q = r.json()["quality"]
+    d = r.json()
+    q = d["quality"]
     assert q["total"] == 0 and q["satisfaction"] == 0 and q["success_rate"] == 0
-    assert r.json()["role_dist"] == [] or isinstance(r.json()["role_dist"], list)
+    assert len(d["trend"]) == 14 and all(x["count"] == 0 for x in d["trend"])
+    assert d["topic_dist"] == [] and d["status_dist"] == []
+    assert "semantic_k" in d["config"]
+    # 形状断言（非 == []）：Task 4 seed 落地后 users 表会有行，只钉 shape 契约
+    rd = d["role_dist"]
+    assert isinstance(rd, list) and all(set(x) == {"name", "value"} for x in rd)
