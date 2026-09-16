@@ -1,11 +1,26 @@
 <script setup lang="ts">
 // 主布局：深墨绿侧边栏（7 菜单）+ 顶栏（面包屑 + 服务标签 + 用户下拉）
 // 结构依据《前端还原规格.md》全局规范；文案与截图一致
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { computed } from 'vue'
+import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
 const pageTitle = computed(() => (route.meta.title as string) ?? '')
+
+// 登出后 store 清空，此时回落到「未登录」占位文案
+const displayName = computed(() => auth.user?.display_name ?? '未登录')
+const roleLabel = computed(() => auth.user?.role ?? '')
+const avatarText = computed(() => displayName.value.slice(0, 1))
+
+function handleCommand(command: string) {
+  if (command === 'logout') {
+    auth.logout()
+    router.push('/login')
+  }
+}
 
 const menus = [
   { path: '/qa', title: '辨证问答', icon: 'ChatDotRound' },
@@ -42,8 +57,8 @@ const menus = [
         </el-menu-item>
       </el-menu>
       <div class="sidebar-footer">
-        <el-avatar :size="28" class="footer-avatar">系</el-avatar>
-        <span class="footer-name">系统管理员</span>
+        <el-avatar :size="28" class="footer-avatar">{{ avatarText }}</el-avatar>
+        <span class="footer-name">{{ displayName }}</span>
       </div>
     </el-aside>
 
@@ -55,14 +70,16 @@ const menus = [
         </el-breadcrumb>
         <div class="topbar-right">
           <span class="service-tag">● 中医药知识服务</span>
-          <el-dropdown>
+          <el-dropdown @command="handleCommand">
             <span class="user-entry">
-              <el-avatar :size="26">系</el-avatar>
-              系统管理员 <el-icon><ArrowDown /></el-icon>
+              <el-avatar :size="26" class="user-avatar">{{ avatarText }}</el-avatar>
+              {{ displayName }}
+              <el-tag v-if="roleLabel" size="small" type="success" effect="plain">{{ roleLabel }}</el-tag>
+              <el-icon><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item>退出登录</el-dropdown-item>
+                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -169,6 +186,11 @@ const menus = [
   cursor: pointer;
   font-size: 14px;
   color: #1f2937;
+}
+
+.user-avatar {
+  background: #2d6a4f;
+  font-size: 12px;
 }
 
 .content {

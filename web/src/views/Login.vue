@@ -1,11 +1,14 @@
 <script setup lang="ts">
-// 登录页骨架 —— 布局与文案依据《前端还原规格.md》P0-1（截图原文，不得自造）
-// 阶段 0 为静态骨架，登录接口在后续阶段接线
-import { reactive } from 'vue'
+// 登录页 —— 布局与文案依据《前端还原规格.md》P0-1（截图原文，不得自造）
+// 提交动作接 POST /api/auth/login，成功后写入 store 并进入工作台
+import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
+const auth = useAuthStore()
+const loading = ref(false)
 const form = reactive({ username: '', password: '', remember: true })
 
 const features = [
@@ -24,13 +27,21 @@ function fillAccount(username: string) {
   form.password = ''
 }
 
-function handleLogin() {
-  // TODO 阶段 4+：POST /api/auth/login 换取 JWT
+async function handleLogin() {
   if (!form.username || !form.password) {
     ElMessage.warning('请输入用户名和密码')
     return
   }
-  router.push('/')
+  loading.value = true
+  try {
+    await auth.login(form.username, form.password)
+    ElMessage.success('登录成功')
+    router.push('/')
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -93,7 +104,7 @@ function handleLogin() {
           <el-link type="primary" :underline="false">忘记密码？</el-link>
         </div>
 
-        <el-button type="primary" class="login-btn" @click="handleLogin">登录工作台</el-button>
+        <el-button type="primary" class="login-btn" :loading="loading" @click="handleLogin">登录工作台</el-button>
 
         <div class="register-tip">还没有组织账号？ <el-link type="primary">申请注册</el-link></div>
 

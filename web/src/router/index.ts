@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 // 路由结构与侧边栏 7 个菜单一一对应（截图事实）
 const router = createRouter({
@@ -42,8 +43,8 @@ const router = createRouter({
         {
           path: 'account',
           name: 'account',
-          component: () => import('../views/Placeholder.vue'),
-          meta: { title: '账户管理', breadcrumb: '账户管理', phase: '阶段 5 (P2)' },
+          component: () => import('../views/account/Accounts.vue'),
+          meta: { title: '账户管理', breadcrumb: '账户管理', phase: '阶段 5' },
         },
         {
           path: 'inference',
@@ -54,13 +55,20 @@ const router = createRouter({
         {
           path: 'profile',
           name: 'profile',
-          component: () => import('../views/Placeholder.vue'),
-          meta: { title: '我的档案', breadcrumb: '我的档案', phase: '阶段 5 (P2)' },
+          component: () => import('../views/account/Profile.vue'),
+          meta: { title: '我的档案', breadcrumb: '我的档案', phase: '阶段 5' },
         },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/qa' },
   ],
+})
+
+// 登录守卫：未持 token 访问受保护页一律回登录页（登录页本身放行）。
+// useAuthStore() 必须在守卫回调内调用 —— 模块顶层调用时 Pinia 尚未被 app.use 激活。
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+  if (to.path !== '/login' && !auth.token) return '/login'
 })
 
 export default router
