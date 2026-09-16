@@ -47,9 +47,10 @@ def test_neighbors_returns_nodes_and_links(client, monkeypatch):
 
 
 def test_neighbors_mixed_status_assigns_per_endpoint(client, monkeypatch):
+    # 阶段 5：候选边被过滤，故用「边已发布 + 目标节点候选」验证节点状态仍按端点取值
     rows = [{"source": "四君子汤", "relation": "组成", "target": "人参",
              "source_type": "方剂", "target_type": "中药",
-             "source_status": "已发布", "target_status": "候选", "status": "候选"}]
+             "source_status": "已发布", "target_status": "候选", "status": "已发布"}]
     _use(monkeypatch, FakeGraph(rows=rows))
     body = client.get("/api/graph/neighbors", params={"name": "四君子汤"}).json()
     statuses = {n["name"]: n["status"] for n in body["nodes"]}
@@ -58,14 +59,14 @@ def test_neighbors_mixed_status_assigns_per_endpoint(client, monkeypatch):
 
 
 def test_neighbors_link_status_reflects_edge_status(client, monkeypatch):
-    """C3：两端节点均已发布、边为候选时，links[0].status 应反映「边状态」而非源节点状态。"""
+    """C3：links[0].status 应反映「边状态」而非端点节点状态（阶段 5：候选边被过滤，改用节点候选/边已发布验证）。"""
     rows = [{"source": "四君子汤", "relation": "组成", "target": "人参",
              "source_type": "方剂", "target_type": "中药",
-             "source_status": "已发布", "target_status": "已发布", "status": "候选"}]
+             "source_status": "候选", "target_status": "候选", "status": "已发布"}]
     _use(monkeypatch, FakeGraph(rows=rows))
     body = client.get("/api/graph/neighbors", params={"name": "四君子汤"}).json()
-    assert body["links"][0]["status"] == "候选"
-    assert {n["status"] for n in body["nodes"]} == {"已发布"}
+    assert body["links"][0]["status"] == "已发布"
+    assert {n["status"] for n in body["nodes"]} == {"候选"}
 
 
 def test_candidates_lists_pending_only(client, monkeypatch):
