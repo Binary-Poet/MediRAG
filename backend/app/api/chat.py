@@ -11,7 +11,7 @@ from app.agent.workflow import get_agent
 from app.db import session_scope
 from app.llm.chat import chat_completion_stream
 from app.models.retrieval_log import RetrievalLog
-from app.services.inference_config import load_inference_config
+from app.services.inference_config import defaults, load_inference_config
 
 router = APIRouter()
 
@@ -27,6 +27,10 @@ def sse(event: str, data: dict | str) -> str:
 
 
 def _initial_state(body: StreamBody, session_id: str) -> dict:
+    try:
+        cfg = load_inference_config()
+    except Exception:
+        cfg = defaults()  # DB 不可达时回落默认，主聊天端点不因日志/配置库故障 500
     return {
         "question": body.question, "session_id": session_id,
         "chat_history": get_history(session_id), "rewritten_query": body.question,
@@ -35,8 +39,26 @@ def _initial_state(body: StreamBody, session_id: str) -> dict:
         "evidence": [], "confidence": 0.0, "low_confidence": False, "reflect_count": 0,
         "safety_flag": None, "safety_message": "", "prompt": "", "answer": "",
         "trace": [],
-        "inference": load_inference_config(),
+        "inference": cfg,
     }
+
+
+def _log_retrieval(session_id: str, final: dict) -> None:
+    """问答完成写 retrieval_log（运行概览趋势/兜底率数据源）；日志失败不影响问答结果。"""
+    try:
+        with session_scope() as s:
+            s.add(RetrievalLog(
+                session_id=session_id,
+                intent=final.get("intent", ""),
+                vector_n=len(final.get("vector_hits", [])),
+                keyword_n=len(final.get("keyword_hits", [])),
+                graph_n=len(final.get("graph_facts", [])),
+                evidence_n=len(final.get("evidence", [])),
+                confidence=float(final.get("confidence", 0.0)),
+                is_fallback=final.get("safety_flag") in ("low_confidence", "emergency"),
+            ))
+    except Exception:
+        pass  # 日志失败不影响问答结果
 
 
 @router.post("/chat/stream")
@@ -102,20 +124,7 @@ def chat_stream(body: StreamBody) -> StreamingResponse:
         ]
         yield sse("references", {"docs": refs, "graph_facts": final["graph_facts"]})
 
-        try:
-            with session_scope() as s:
-                s.add(RetrievalLog(
-                    session_id=session_id,
-                    intent=final.get("intent", ""),
-                    vector_n=len(final.get("vector_hits", [])),
-                    keyword_n=len(final.get("keyword_hits", [])),
-                    graph_n=len(final.get("graph_facts", [])),
-                    evidence_n=len(final.get("evidence", [])),
-                    confidence=float(final.get("confidence", 0.0)),
-                    is_fallback=final.get("safety_flag") in ("low_confidence", "emergency"),
-                ))
-        except Exception:
-            pass  # 日志失败不影响问答结果
+        _log_retrieval(session_id, final)
 
         yield sse("done", {"message_id": session_id, "metrics": {
             "vector_n": len(final.get("vector_hits", [])),

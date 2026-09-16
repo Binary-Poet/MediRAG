@@ -81,3 +81,28 @@ def test_feedback_api(client):
         assert [x.useful for x in rows] == [True, False]
     # 越界 422
     assert client.post("/api/feedback", json={"session_id": "sess-1", "useful": 2}).status_code == 422
+
+
+def test_saved_config_reaches_llm_call(client, monkeypatch):
+    from app.models.inference_config import InferenceConfig
+    with session_scope() as s:
+        s.add(InferenceConfig(id=1, model="qwen-plus", answer_temp=0.7))
+    class FakeGraph:
+        def stream(self, initial, stream_mode=None):
+            yield {"understand": {"trace": [], "intent": "relation"}}
+            yield {"context": {"prompt": "p"}}
+            yield {"safety": {"safety_flag": None, "safety_message": ""}}
+            yield {"fuse": {"evidence": [{"chunk_id": "c1", "title": "t", "doc_name": "d",
+                                          "chapter": "", "page_no": 1, "text": "x",
+                                          "score": 0.9}],
+                            "confidence": 0.9, "low_confidence": False,
+                            "trace": [{"step": "rerank"}]}}
+    monkeypatch.setattr(chatmod, "get_agent", lambda: FakeGraph())
+    captured = []
+    monkeypatch.setattr(chatmod, "chat_completion_stream",
+                        lambda system, user, temperature=0.3, vendor=None, model=None,
+                        **kw: captured.append((temperature, model)) or iter(["流"]))
+    r = client.post("/api/chat/stream", json={"question": "四君子汤组成", "session_id": "sess-3"})
+    assert r.status_code == 200
+    # 保存的配置到达 LLM 调用（生成段 temperature/model 转发）
+    assert captured[0] == (0.7, "qwen-plus")

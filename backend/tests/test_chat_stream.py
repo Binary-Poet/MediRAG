@@ -1,6 +1,16 @@
 from unittest.mock import MagicMock
 
+import pytest
+
 import app.api.chat as chatmod
+import app.db as dbmod
+
+
+@pytest.fixture(autouse=True)
+def _db(monkeypatch):
+    eng = dbmod._make_engine("sqlite:///:memory:")
+    dbmod.Base.metadata.create_all(eng)
+    monkeypatch.setattr(dbmod, "_engine", eng)
 
 
 def _patch_agent(client, monkeypatch, *, safety="ok", answer=None, safety_message=""):
