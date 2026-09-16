@@ -12,12 +12,23 @@ MODEL_FIELD_RANGES = {
 TEMP_FIELDS = ("answer_temp", "query_temp")
 MODELS = {"deepseek-chat", "qwen-plus"}
 
+# 模型 ↔ 就绪所需 API Key（可用性判定与不可用原因文案共用，避免两处漂移）
+_MODEL_KEY_ENV = {"deepseek-chat": "DEEPSEEK_API_KEY", "qwen-plus": "DASHSCOPE_API_KEY"}
+
+
+def available_models() -> list[str]:
+    """按当前 settings 的 Key 就绪情况返回可选模型（前端置灰 / PUT 拦截共用）。"""
+    s = get_settings()
+    ok = {"deepseek-chat": bool(s.deepseek_api_key),
+          "qwen-plus": bool(s.dashscope_api_key)}
+    return [m for m in ("deepseek-chat", "qwen-plus") if ok[m]]
+
 
 def defaults() -> dict:
     s = get_settings()
     return {"semantic_k": s.semantic_k, "keyword_k": s.keyword_k,
             "fuse_candidate": s.fuse_candidate, "final_evidence": s.final_evidence,
-            "rrf_k": s.rrf_k, "model": "deepseek-chat",
+            "rrf_k": s.rrf_k, "model": s.llm_model_main,
             "answer_temp": 0.3, "query_temp": 0.1}
 
 
@@ -49,6 +60,11 @@ def validate(body: dict) -> None:
 
 def save_inference_config(body: dict) -> dict:
     validate(body)
+    # 选择了 Key 未配置的模型 → 每次问答必失败；保存即拦截（前端下拉同样置灰）。
+    avail = available_models()
+    if body["model"] not in avail:
+        env = _MODEL_KEY_ENV.get(body["model"], "对应 API Key")
+        raise ValueError(f"{body['model']} 当前不可用：{env} 未配置")
     with session_scope() as s:
         row = s.execute(select(InferenceConfig)).scalar_one_or_none()
         if row is None:

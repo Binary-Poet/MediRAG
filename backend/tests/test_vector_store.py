@@ -48,3 +48,25 @@ def test_empty_store_returns_no_hits(tmp_path) -> None:
     store = LocalVectorStore(str(tmp_path / "idx.json"))
     assert store.search([1.0, 0.0]) == []
     assert np is not None  # 保持导入引用
+
+
+def test_rename_doc_rewrites_doc_name_only(tmp_path) -> None:
+    """rename_doc 改写匹配切片的 doc_name，返回改写数；向量/其它元数据不变。"""
+    store = LocalVectorStore(str(tmp_path / "idx.json"))
+    items = [
+        {"chunk_id": "old#0000", "doc_name": "旧名.md", "title": "t0", "text": "x",
+         "embedding": [1.0, 0.0]},
+        {"chunk_id": "old#0001", "doc_name": "旧名.md", "title": "t1", "text": "y",
+         "embedding": [0.0, 1.0]},
+        {"chunk_id": "other#0000", "doc_name": "别档.md", "title": "t2", "text": "z",
+         "embedding": [0.5, 0.5]},
+    ]
+    store.upsert(items)
+    assert store.rename_doc("旧名.md", "新名.md") == 2
+    names = sorted(c["doc_name"] for c in store.chunks)
+    assert names == ["别档.md", "新名.md", "新名.md"]
+    # 未命中返回 0（幂等，不误伤其它文档）
+    assert store.rename_doc("不存在.md", "x.md") == 0
+    # 向量仍在（检索不受影响）
+    hits = store.search([1.0, 0.0], top_k=1)
+    assert hits[0]["chunk_id"] == "old#0000"

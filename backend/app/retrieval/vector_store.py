@@ -72,6 +72,19 @@ class LocalVectorStore:
         self._rebuild_matrix()
         return removed
 
+    def rename_doc(self, old_name: str, new_name: str) -> int:
+        """改写某文档全部切片的 doc_name（重命名文档时调用）。返回改写数。
+
+        doc_name 在入库时固化，而 remove_by_doc 按 doc_name 过滤——若不随重命名同步改写，
+        删除流程将用新名匹配 0 条，静默留下孤儿切片并污染检索。向量本身不变，无需重建矩阵。
+        """
+        renamed = 0
+        for c in self.chunks:
+            if c["doc_name"] == old_name:
+                c["doc_name"] = new_name
+                renamed += 1
+        return renamed
+
     # ===== 持久化 =====
     def save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)

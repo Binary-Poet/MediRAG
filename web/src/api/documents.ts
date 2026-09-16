@@ -1,4 +1,5 @@
 import type { DocList, DocItem } from '../types/knowledge'
+import { authHeaders } from './http'
 
 export async function listDocuments(): Promise<DocList> {
   const resp = await fetch('/api/documents')
@@ -39,12 +40,22 @@ export function downloadUrl(id: number): string {
 
 export async function renameDocument(id: number, name: string): Promise<DocItem> {
   const resp = await fetch(`/api/documents/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ name }),
   })
   if (!resp.ok) {
     const detail = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }))
     throw new Error(detail.detail ?? '重命名失败')
+  }
+  return resp.json()
+}
+
+/** 删除文档（鉴权写端点，需带 Bearer）。 */
+export async function deleteDocument(id: number): Promise<{ deleted: number; removed_chunks: number }> {
+  const resp = await fetch(`/api/documents/${id}`, { method: 'DELETE', headers: authHeaders() })
+  if (!resp.ok) {
+    const detail = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }))
+    throw new Error(detail.detail ?? '删除失败')
   }
   return resp.json()
 }

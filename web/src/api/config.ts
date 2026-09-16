@@ -1,19 +1,27 @@
+import { authHeaders } from './http'
+
 export interface InferenceConfig {
   semantic_k: number; keyword_k: number; fuse_candidate: number
   final_evidence: number; rrf_k: number
   model: string; answer_temp: number; query_temp: number
 }
 
-export async function getConfig(): Promise<InferenceConfig> {
+export interface ConfigResponse {
+  items: InferenceConfig
+  /** 按后端 Key 就绪情况计算的可选模型（未就绪的下拉选项置灰）。 */
+  available_models: string[]
+}
+
+export async function getConfig(): Promise<ConfigResponse> {
   const resp = await fetch('/api/config')
   if (!resp.ok) throw new Error(`配置加载失败（${resp.status}）`)
-  return (await resp.json()).items
+  return resp.json()
 }
 
 export async function saveConfig(body: InferenceConfig): Promise<InferenceConfig> {
   const resp = await fetch('/api/config', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   })
   if (!resp.ok) {

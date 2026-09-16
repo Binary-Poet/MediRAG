@@ -1,7 +1,24 @@
 """图谱 re-import 端点（真实 seed 驱动的幂等）；neighbors 去重与 2-hop 白名单过滤（fake graph）。"""
+import pytest
+
+import app.db as dbmod
 from app.api import graph_api
 from app.graph import importer
 from app.graph.extractor import VALID_RELATIONS
+
+
+@pytest.fixture(autouse=True)
+def _db(monkeypatch):
+    eng = dbmod._make_engine("sqlite:///:memory:")
+    dbmod.init_db(eng)                      # 建表 + seed 三用户（re-import 鉴权用）
+    monkeypatch.setattr(dbmod, "_engine", eng)
+
+
+def _auth(client) -> dict:
+    """登录 admin 取 Bearer 头（POST /api/graph/import 已挂 current_user）。"""
+    tok = client.post("/api/auth/login",
+                      json={"username": "admin", "password": "admin123"}).json()["token"]
+    return {"Authorization": f"Bearer {tok}"}
 
 
 class RecordingGraph:
@@ -34,10 +51,16 @@ def test_reimport_endpoint_returns_imported_counts(client, monkeypatch):
     """
     g = RecordingGraph()
     monkeypatch.setattr(importer, "get_graph", lambda: g)
-    r = client.post("/api/graph/import")
+    r = client.post("/api/graph/import", headers=_auth(client))
     assert r.status_code == 200
     assert r.json() == {"imported": {"nodes": 33, "edges": 32}}
     assert g.calls  # 端点确实驱动了 seed 写入
+
+
+def test_reimport_requires_token(client, monkeypatch):
+    """写端点须登录：未带 token 一律 401。"""
+    monkeypatch.setattr(importer, "get_graph", lambda: RecordingGraph())
+    assert client.post("/api/graph/import").status_code == 401
 
 
 def _rows(hop):

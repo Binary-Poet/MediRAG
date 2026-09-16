@@ -2,14 +2,16 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from app.api.auth import current_user
 from app.db import session_scope
 from app.ingestion.parsers import SUPPORTED_EXTS
 from app.ingestion.pipeline import ingest_document
 from app.models.document import Document
+from app.models.user import User
 from app.retrieval.keyword import rebuild_keyword_index
 from app.retrieval.vector_store import get_store
 
@@ -119,7 +121,8 @@ def document_download(doc_id: int) -> FileResponse:
 
 
 @router.put("/documents/{doc_id}")
-def rename_document(doc_id: int, body: RenameBody) -> dict:
+def rename_document(doc_id: int, body: RenameBody,
+                    _: User = Depends(current_user)) -> dict:
     new_name = Path(body.name).name
     ext = new_name.rsplit(".", 1)[-1].lower() if "." in new_name else ""
     if ext not in SUPPORTED_EXTS:
@@ -136,8 +139,19 @@ def rename_document(doc_id: int, body: RenameBody) -> dict:
                                        Document.status != "失败").first()
         if dup is not None:
             raise HTTPException(status_code=409, detail=f"已存在同名文档《{new_name}》")
+        old_name = d.name
         d.name = new_name
-        return DocumentOut.of(d).model_dump()
+        out = DocumentOut.of(d).model_dump()
+
+    # 切片 doc_name 在入库时固化，须随重命名同步改写——否则后续删除用新名匹配 0 条，
+    # 静默留下孤儿切片（仍可被检索/BM25 引用）。向量不变，只需持久化 + 重建 BM25。
+    # 命中 0 条（未入库/失败态文档）时跳过落盘与重建，避免无谓的全量重写。
+    if old_name != new_name:
+        store = get_store()
+        if store.rename_doc(old_name, new_name):
+            store.save()
+            rebuild_keyword_index()
+    return out
 
 
 @router.get("/documents/{doc_id}/parse-status")
@@ -151,7 +165,7 @@ def parse_status(doc_id: int) -> dict:
 
 
 @router.delete("/documents/{doc_id}")
-def delete_document(doc_id: int) -> dict:
+def delete_document(doc_id: int, _: User = Depends(current_user)) -> dict:
     """删除文档：移除记录 + 从向量库剔除该文档切片 + 重建 BM25。"""
     with session_scope() as s:
         doc = s.get(Document, doc_id)

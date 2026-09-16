@@ -3,13 +3,12 @@ import app.db as dbmod
 import app.ingestion.pipeline as pmod
 import app.retrieval.keyword as kmod
 from app.api import documents as dmod
-from app.db import Base, _make_engine
 from app.retrieval.vector_store import LocalVectorStore
 
 
 def _prepare(monkeypatch, tmp_path):
-    engine = _make_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
+    engine = dbmod._make_engine("sqlite:///:memory:")
+    dbmod.init_db(engine)                              # 建表 + seed 三用户（写端点鉴权用）
     store = LocalVectorStore(str(tmp_path / "idx.json"))
     monkeypatch.setattr(dbmod, "_engine", engine)      # 所有 session_scope() 走测试库
     monkeypatch.setattr(pmod, "get_store", lambda: store)
@@ -18,6 +17,13 @@ def _prepare(monkeypatch, tmp_path):
     monkeypatch.setattr(kmod, "get_store", lambda: store)      # BM25 重建走内存库
     monkeypatch.setattr(dmod, "UPLOAD_DIR", tmp_path / "uploads")
     return engine, store
+
+
+def _auth(client) -> dict:
+    """登录 admin 取 Bearer 头（写端点已挂 current_user）。"""
+    tok = client.post("/api/auth/login",
+                      json={"username": "admin", "password": "admin123"}).json()["token"]
+    return {"Authorization": f"Bearer {tok}"}
 
 
 def test_upload_requires_topic(client, monkeypatch, tmp_path):
@@ -72,7 +78,8 @@ def test_upload_duplicate_name_conflicts_then_allows_after_delete(client, monkey
     assert "已存在同名文档" in second.json()["detail"]
     assert len(list((tmp_path / "uploads").glob("*"))) == 1      # 409 未落孤儿文件
 
-    assert client.delete(f"/api/documents/{first.json()['id']}").status_code == 200
+    assert client.delete(f"/api/documents/{first.json()['id']}",
+                         headers=_auth(client)).status_code == 200
     third = client.post("/api/documents", files=files, data={"topic": "内科"})
     assert third.status_code == 200                              # 切片已清除，允许重传
 
@@ -115,7 +122,7 @@ def test_delete_removes_record_and_chunks(client, monkeypatch, tmp_path):
     doc_id = resp.json()["id"]
     assert len(store.chunks) >= 1
 
-    dele = client.delete(f"/api/documents/{doc_id}")
+    dele = client.delete(f"/api/documents/{doc_id}", headers=_auth(client))
     assert dele.status_code == 200
     assert dele.json()["removed_chunks"] >= 1
     assert len(store.chunks) == 0

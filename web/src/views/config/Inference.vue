@@ -13,6 +13,18 @@ const original = reactive<InferenceConfig>({ ...DEFAULTS })
 const form = reactive<InferenceConfig>({ ...DEFAULTS })
 const saving = ref(false)
 
+// 模型可用性来自后端（按 API Key 就绪情况计算）：未就绪的选项置灰 + 提示。
+const MODEL_OPTIONS = ['deepseek-chat', 'qwen-plus'] as const
+const MODEL_KEY_HINT: Record<string, string> = {
+  'deepseek-chat': '需配置 DEEPSEEK_API_KEY',
+  'qwen-plus': '需配置 DASHSCOPE_API_KEY',
+}
+const availableModels = ref<string[]>([])
+
+function modelDisabled(m: string) {
+  return !availableModels.value.includes(m)
+}
+
 const mixFields = [
   { key: 'semantic_k', label: '语义召回数', min: 1, max: 100 },
   { key: 'keyword_k', label: '关键词召回数', min: 1, max: 100 },
@@ -24,7 +36,8 @@ const mixFields = [
 onMounted(async () => {
   try {
     const c = await getConfig()
-    Object.assign(original, c); Object.assign(form, c)
+    Object.assign(original, c.items); Object.assign(form, c.items)
+    availableModels.value = c.available_models
   } catch (e) { ElMessage.error((e as Error).message) }
 })
 
@@ -90,8 +103,16 @@ function restoreAll() {
         <div class="row">
           <span class="row-label">对话模型</span>
           <el-select v-model="form.model" class="model-select">
-            <el-option label="deepseek-chat" value="deepseek-chat" />
-            <el-option label="qwen-plus" value="qwen-plus" />
+            <el-option
+              v-for="m in MODEL_OPTIONS"
+              :key="m"
+              :label="m"
+              :value="m"
+              :disabled="modelDisabled(m)"
+            >
+              <span>{{ m }}</span>
+              <span v-if="modelDisabled(m)" class="opt-hint">{{ MODEL_KEY_HINT[m] }}</span>
+            </el-option>
           </el-select>
         </div>
         <div class="row">
@@ -137,6 +158,7 @@ function restoreAll() {
 .row-label { flex: none; width: 120px; font-size: 13px; color: v-bind(theme.textColorSecondary); }
 .stepper { width: 160px; }
 .model-select { width: 200px; }
+.opt-hint { margin-left: 8px; font-size: 12px; color: v-bind(theme.textColorMuted); }
 .slider { width: 380px; }
 .actions { display: flex; align-items: center; gap: 12px; }
 .hint { margin: 0; font-size: 12px; color: v-bind(theme.textColorMuted); }

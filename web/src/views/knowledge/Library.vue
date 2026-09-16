@@ -4,7 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { DocItem } from '../../types/knowledge'
 import { TOPICS } from '../../types/knowledge'
-import { humanSize, listDocuments, parseStatus, getDocument, downloadUrl, renameDocument } from '../../api/documents'
+import { humanSize, listDocuments, parseStatus, getDocument, downloadUrl, renameDocument, deleteDocument } from '../../api/documents'
 import type { DocDetail } from '../../api/documents'
 import { theme } from '../../styles/theme'
 import UploadDialog from './UploadDialog.vue'
@@ -55,13 +55,13 @@ async function removeDoc(d: DocItem) {
   } catch {
     return // 用户取消：静默返回，不再冒泡成 console.error
   }
-  const resp = await fetch(`/api/documents/${d.id}`, { method: 'DELETE' })
-  if (!resp.ok) {
-    ElMessage.error(`删除失败（${resp.status}）`)
-    return
+  try {
+    await deleteDocument(d.id)
+    ElMessage.success('已删除')
+    refresh()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
   }
-  ElMessage.success('已删除')
-  refresh()
 }
 
 async function showDetail(d: DocItem) {

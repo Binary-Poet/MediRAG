@@ -4,6 +4,7 @@
 import { nextTick, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { streamChat } from '../../api/chat'
+import { authHeaders } from '../../api/http'
 import { theme } from '../../styles/theme'
 import type { GraphFact, Reference, StepEvent } from '../../types/chat'
 import TraceDialog from './components/TraceDialog.vue'
@@ -101,7 +102,7 @@ async function sendFeedback(m: QA, useful: boolean) {
   m.feedback = useful
   try {
     const resp = await fetch('/api/feedback', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ session_id: sessionId, useful }),
     })
     if (!resp.ok) throw new Error(`反馈提交失败（${resp.status}）`)

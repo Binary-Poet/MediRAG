@@ -12,8 +12,15 @@ from app.models.feedback import Feedback
 @pytest.fixture(autouse=True)
 def _db(monkeypatch):
     eng = dbmod._make_engine("sqlite:///:memory:")
-    dbmod.Base.metadata.create_all(eng)
+    dbmod.init_db(eng)                      # 建表 + seed 三用户（feedback 鉴权用）
     monkeypatch.setattr(dbmod, "_engine", eng)
+
+
+def _auth(client) -> dict:
+    """登录 admin 取 Bearer 头（POST /api/feedback 已挂 current_user）。"""
+    tok = client.post("/api/auth/login",
+                      json={"username": "admin", "password": "admin123"}).json()["token"]
+    return {"Authorization": f"Bearer {tok}"}
 
 
 def test_chat_stream_writes_retrieval_log(client, monkeypatch):
@@ -71,16 +78,20 @@ def test_fallback_marks_is_fallback(client, monkeypatch):
 
 
 def test_feedback_api(client):
-    r = client.post("/api/feedback", json={"session_id": "sess-1", "useful": True})
+    headers = _auth(client)
+    r = client.post("/api/feedback", json={"session_id": "sess-1", "useful": True}, headers=headers)
     assert r.status_code == 200
-    r = client.post("/api/feedback", json={"session_id": "sess-1", "useful": False})
+    r = client.post("/api/feedback", json={"session_id": "sess-1", "useful": False}, headers=headers)
     assert r.status_code == 200
     with session_scope() as s:
         rows = s.execute(select(Feedback)).scalars().all()
         assert len(rows) == 2
         assert [x.useful for x in rows] == [True, False]
     # 越界 422
-    assert client.post("/api/feedback", json={"session_id": "sess-1", "useful": 2}).status_code == 422
+    assert client.post("/api/feedback", json={"session_id": "sess-1", "useful": 2},
+                       headers=headers).status_code == 422
+    # 未登录 401
+    assert client.post("/api/feedback", json={"session_id": "sess-1", "useful": True}).status_code == 401
 
 
 def test_saved_config_reaches_llm_call(client, monkeypatch):

@@ -1,8 +1,10 @@
 """推理配置 API：GET 当前生效值 / PUT 保存（下一次问答请求生效）。"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.services.inference_config import (defaults, load_inference_config,
+from app.api.auth import current_user
+from app.models.user import User
+from app.services.inference_config import (available_models, load_inference_config,
                                            save_inference_config)
 
 router = APIRouter()
@@ -21,11 +23,11 @@ class ConfigBody(BaseModel):
 
 @router.get("/config")
 def get_config() -> dict:
-    return {"items": load_inference_config()}
+    return {"items": load_inference_config(), "available_models": available_models()}
 
 
 @router.put("/config")
-def put_config(body: ConfigBody) -> dict:
+def put_config(body: ConfigBody, _: User = Depends(current_user)) -> dict:
     try:
         return save_inference_config(body.model_dump())
     except ValueError as e:

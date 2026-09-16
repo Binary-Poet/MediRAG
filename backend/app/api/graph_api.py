@@ -1,10 +1,12 @@
 """图谱 API：搜索/邻居/详情 + 候选审核（规格 P0-5，方案 6.5/第八节）。"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.api.auth import current_user
 from app.graph.extractor import VALID_RELATIONS
 from app.graph.importer import import_seed
 from app.graph.neo4j_client import get_graph
+from app.models.user import User
 
 router = APIRouter()
 
@@ -71,7 +73,7 @@ def neighbors(name: str, hop: int = 2) -> dict:
 
 
 @router.post("/graph/import")
-def reimport() -> dict:
+def reimport(_: User = Depends(current_user)) -> dict:
     """重新导入基础数据（幂等 MERGE，不破坏已发布/候选状态）。"""
     return {"imported": import_seed()}
 

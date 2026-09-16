@@ -4,6 +4,7 @@
 import { useRoute, useRouter } from 'vue-router'
 import { computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
+import { theme } from '../styles/theme'
 
 const route = useRoute()
 const router = useRouter()
@@ -190,7 +191,7 @@ const menus = [
 }
 
 .user-avatar {
-  background: #2d6a4f;
+  background: v-bind(theme.colorPrimary);
   font-size: 12px;
 }
 

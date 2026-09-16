@@ -1,4 +1,5 @@
 import type { CandidateEdge, CandidateNode, GraphEntity, GraphLink, GraphNode } from '../types/graph'
+import { authHeaders } from './http'
 
 async function getJson<T>(url: string): Promise<T> {
   const resp = await fetch(url)
@@ -32,7 +33,7 @@ export const rejectCandidate = (body: Record<string, string>) => post('/api/grap
 
 /** 重新导入基础数据（幂等 MERGE，不破坏已发布/候选状态——规格 P0-5）。 */
 export const reimportGraph = (): Promise<{ imported: { nodes: number; edges: number } }> =>
-  fetch('/api/graph/import', { method: 'POST' }).then(async (resp) => {
+  fetch('/api/graph/import', { method: 'POST', headers: authHeaders() }).then(async (resp) => {
     if (!resp.ok) throw new Error(`导入失败（${resp.status}）`)
     return resp.json()
   })
