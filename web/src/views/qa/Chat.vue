@@ -61,13 +61,19 @@ async function openSession(id: string) {
       const m = msgs[i]
       if (m.role !== 'user') continue
       const a = msgs[i + 1]?.role === 'assistant' ? msgs[i + 1] : null
+      const trace = [...(a?.payload?.trace ?? [])]
+      // 低置信拒答无 LLM 生成：后端把兜底话术同时写进 content 与 safety.message。
+      // 实时态靠「无 token → answer 为空」抑制正文，回放必须复刻同一规则，否则同一句话渲染两遍。
+      const refused = a?.payload?.safety?.type === 'low_confidence'
+      // 实时态在首个 token 时补一步合成步「生成回答」；trace 里没有它，回放要补上，否则第 5 步永远点不亮
+      if (!refused && a?.content && trace.length) trace.push({ step: 'generate' })
       built.push(reactive<QA>({
         question: m.content,
-        answer: a?.content ?? '',
+        answer: refused ? '' : (a?.content ?? ''),
         references: a?.payload?.references ?? [],
         graphFacts: a?.payload?.graph_facts ?? [],
         safety: a?.payload?.safety ?? null,
-        trace: a?.payload?.trace ?? [],
+        trace,
         thinkingExpanded: false,
       }))
     }
