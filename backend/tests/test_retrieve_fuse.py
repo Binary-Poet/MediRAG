@@ -132,3 +132,53 @@ def test_retrieve_reads_topk_from_settings(monkeypatch):
     kw = dict(calls_kwargs)
     assert kw["vector_search"]["top_k"] == 7
     assert kw["keyword_search"]["top_k"] == 3
+
+
+def test_retrieve_reads_topk_from_inference(monkeypatch):
+    calls_kwargs = []
+
+    class FakeTool:
+        def __init__(self, name):
+            self._name = name
+        def invoke(self, kwargs):
+            calls_kwargs.append((self._name, dict(kwargs)))
+            return {"fact": self._name}
+
+    monkeypatch.setattr(rmod, "TOOLS", {n: FakeTool(n) for n in ["vector_search", "keyword_search", "graph_search"]})
+    monkeypatch.setattr(rmod, "get_settings",
+                        lambda: _Cfg(semantic_k=7, keyword_k=3))
+    rmod.retrieve(_state(intent="concept", entity_names=[], rewritten_query="风寒束表 风热犯表",
+                         inference={"semantic_k": 3, "keyword_k": 4}))
+    kw = dict(calls_kwargs)
+    assert kw["vector_search"]["top_k"] == 3     # inference 覆盖 settings 的 7
+    assert kw["keyword_search"]["top_k"] == 4    # inference 覆盖 settings 的 3
+
+
+def test_fuse_reads_inference_overrides(monkeypatch):
+    seen = {}
+
+    def _rrf(lists, k=60, weights=None):
+        seen["k"] = k
+        return [
+            {"chunk_id": "a", "title": "四君子汤", "text": "组成人参白术茯苓炙甘草", "rrf_score": 0.3},
+            {"chunk_id": "b", "title": "归脾汤", "text": "益气补血", "rrf_score": 0.2},
+        ]
+
+    def _rerank(q, docs, top_n):
+        seen["top_n"] = top_n
+        return [{"index": 0, "score": 0.9}]
+
+    monkeypatch.setattr(fmod, "rrf_fuse", _rrf)
+    monkeypatch.setattr(fmod, "rerank", _rerank)
+    monkeypatch.setattr(fmod, "get_settings", lambda: _Cfg())
+    st = _state(vector_hits=[{"chunk_id": "a"}], keyword_hits=[{"chunk_id": "b"}],
+                inference={"rrf_k": 40, "fuse_candidate": 1})
+    upd = fmod.fuse(st)
+    assert seen["k"] == 40           # rrf_k 被 inference 覆盖
+    assert len(upd["fused"]) == 1    # fuse_candidate=1 截断生效
+    assert seen["top_n"] == 5        # final_evidence 未设置 → 回落 rerank_top_n
+
+    st2 = _state(vector_hits=[{"chunk_id": "a"}], keyword_hits=[{"chunk_id": "b"}],
+                 inference={"final_evidence": 2})
+    fmod.fuse(st2)
+    assert seen["top_n"] == 2        # 最终证据数覆盖精排 top_n（Ruling T1-3 打通）

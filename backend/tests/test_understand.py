@@ -47,6 +47,23 @@ def test_understand_falls_back_to_lexicon_on_garbage(monkeypatch):
     assert "人参" in upd["entity_names"]
 
 
+def test_understand_reads_inference_config(monkeypatch):
+    monkeypatch.setattr(umod, "get_graph", lambda: _FakeGraph())
+    seen = {}
+
+    def _mock(*a, **k):
+        seen["temperature"] = k.get("temperature")
+        seen["model"] = k.get("model")
+        return ('{"rewritten_query": "四君子汤的中药组成成分", '
+                '"entities": [{"name": "四君子汤", "type": "方剂"}], "intent": "relation"}')
+
+    monkeypatch.setattr(umod, "chat_completion", _mock)
+    upd = understand(_state(inference={"query_temp": 1.7, "model": "qwen-plus"}))
+    assert seen["temperature"] == 1.7          # query_temp 生效（默认 0.1 被覆盖）
+    assert seen["model"] == "qwen-plus"        # 模型透传
+    assert upd["intent"] == "relation"
+
+
 class _FakeGraph:
     def all_entities(self):
         return [{"name": "四君子汤", "alias": "", "type": "方剂"}]

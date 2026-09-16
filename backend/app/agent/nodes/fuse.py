@@ -13,14 +13,14 @@ def fuse(state: AgentState) -> dict:
     fused = rrf_fuse(
         [state["vector_hits"], state["keyword_hits"]], k=cfg.get("rrf_k", s.rrf_k))[:cfg.get("fuse_candidate", s.fuse_candidate)]
     docs = [f"{c['title']}：{c['text']}" for c in fused]
-    reranked = rerank(state["rewritten_query"], docs, top_n=cfg.get("rerank_top_n", s.rerank_top_n))
+    reranked = rerank(state["rewritten_query"], docs, top_n=cfg.get("final_evidence", s.rerank_top_n))
     evidence = [{**fused[r["index"]], "score": r["score"]} for r in reranked]
     confidence = max((e["score"] for e in evidence), default=0.0)
-    low_confidence = bool(evidence) and evidence[0]["score"] < cfg.get("evidence_min_score", s.evidence_min_score)
+    low_confidence = bool(evidence) and evidence[0]["score"] < s.evidence_min_score
 
     # 图谱强证据豁免：低置信但图谱命中 → 剔除低分文献噪声（阶段 2 R8 语义）
     if low_confidence and state.get("graph_facts"):
-        evidence = [e for e in evidence if e["score"] >= cfg.get("evidence_min_score", s.evidence_min_score)]
+        evidence = [e for e in evidence if e["score"] >= s.evidence_min_score]
         confidence = max((e["score"] for e in evidence), default=0.0)
 
     trace = [

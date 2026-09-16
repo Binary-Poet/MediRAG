@@ -2,8 +2,16 @@
 import pytest
 from sqlalchemy import select
 
+import app.db as dbmod
 from app.db import session_scope
 from app.models.inference_config import InferenceConfig
+
+
+@pytest.fixture(autouse=True)
+def _db(monkeypatch):
+    eng = dbmod._make_engine("sqlite:///:memory:")
+    dbmod.Base.metadata.create_all(eng)
+    monkeypatch.setattr(dbmod, "_engine", eng)
 
 
 def test_get_default_matches_spec(client):
