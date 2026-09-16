@@ -8,7 +8,17 @@ const USER_KEY = 'medirag_user'
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     token: localStorage.getItem(TOKEN_KEY) ?? '',
-    user: JSON.parse(localStorage.getItem(USER_KEY) ?? 'null') as UserInfo | null,
+    // localStorage 可能被写入非法 JSON：直接 JSON.parse 会抛错，
+    // 而守卫每次导航都会实例化 store —— 一旦抛错则导航永不 resolve（含 /login 自身），
+    // 整个应用白屏且无法恢复。故解析失败即清掉脏数据并回落到未登录。
+    user: (() => {
+      try {
+        return JSON.parse(localStorage.getItem(USER_KEY) ?? 'null') as UserInfo | null
+      } catch {
+        localStorage.removeItem(USER_KEY)
+        return null
+      }
+    })(),
   }),
   actions: {
     async login(username: string, password: string) {

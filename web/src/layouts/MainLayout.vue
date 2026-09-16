@@ -10,8 +10,9 @@ const router = useRouter()
 const auth = useAuthStore()
 const pageTitle = computed(() => (route.meta.title as string) ?? '')
 
-// 登出后 store 清空，此时回落到「未登录」占位文案
-const displayName = computed(() => auth.user?.display_name ?? '未登录')
+// 登出后 store 清空，此时回落到「未登录」占位文案。
+// 注意用 || 而非 ??：display_name 可以为空串（新建用户时姓名非必填），?? 不兜空串会导致侧栏显示空白。
+const displayName = computed(() => auth.user?.display_name || '未登录')
 const roleLabel = computed(() => auth.user?.role ?? '')
 const avatarText = computed(() => displayName.value.slice(0, 1))
 

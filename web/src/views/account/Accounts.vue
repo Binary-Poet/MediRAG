@@ -42,6 +42,11 @@ async function submitCreate() {
     ElMessage.warning('请填写用户名与密码')
     return
   }
+  // 后端 display_name 允许空串，但空姓名会让侧栏/档案页显示空白，故前端强制必填
+  if (!form.display_name.trim()) {
+    ElMessage.warning('请输入姓名')
+    return
+  }
   creating.value = true
   try {
     await createUser({ ...form }, auth.token)
@@ -112,7 +117,7 @@ async function removeUser(row: UserInfo) {
         <el-form-item label="用户名" required>
           <el-input v-model="form.username" placeholder="登录用户名" />
         </el-form-item>
-        <el-form-item label="姓名">
+        <el-form-item label="姓名" required>
           <el-input v-model="form.display_name" placeholder="展示姓名" />
         </el-form-item>
         <el-form-item label="角色">

@@ -10,10 +10,11 @@ const auth = useAuthStore()
 const form = reactive({ old_password: '', new_password: '' })
 const saving = ref(false)
 
+// 用 || 而非 ??：display_name 允许为空串，?? 不兜空串会显示空白
 const infoRows = computed(() => [
-  { label: '用户名', value: auth.user?.username ?? '-' },
-  { label: '姓名', value: auth.user?.display_name ?? '-' },
-  { label: '角色', value: auth.user?.role ?? '-' },
+  { label: '用户名', value: auth.user?.username || '-' },
+  { label: '姓名', value: auth.user?.display_name || '-' },
+  { label: '角色', value: auth.user?.role || '-' },
 ])
 
 async function submit() {
