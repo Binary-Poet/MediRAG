@@ -214,28 +214,31 @@ onMounted(() => {
   background: v-bind(theme.hoverBg);
 }
 
-/* 前置对话气泡图标（规格 P0-2 会话项）：圆环 + 左下小尾巴，纯 CSS，无图标库依赖 */
+/* 前置对话气泡图标（规格 P0-2 会话项）：圆环 + 圆内三点 + 左下小尾巴，纯 CSS，无图标库依赖。
+   直径按参考截图比例定：截图里图标宽 / 标题中文字高 ≈ 1.2，本组件标题 13px（墨迹约 12px），
+   故取 16px；描边仍 1.5px（截图线条很细，缩到 1px 会发虚）。 */
 .sl-item-icon {
   flex: none;
-  width: 22px;
-  height: 22px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   border: 1.5px solid v-bind(theme.borderColor);
   position: relative;
 }
 
 .sl-item-icon::before {
-  /* 气泡内的三枚省略点：一枚实心点 + 两枚 box-shadow 副本，避免三个 DOM 节点 */
+  /* 气泡内的三枚省略点：一枚实心点 + 两枚 box-shadow 副本，避免三个 DOM 节点。
+     2px 点 / 3px 间距：再小（1px 点）在 1x 下会糊成一团，故以此为止。 */
   content: '';
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 3px;
-  height: 3px;
-  margin: -1.5px 0 0 -5.5px;
+  width: 2px;
+  height: 2px;
+  margin: -1px 0 0 -4px;
   border-radius: 50%;
   background: v-bind(theme.borderColor);
-  box-shadow: 4px 0 0 v-bind(theme.borderColor), 8px 0 0 v-bind(theme.borderColor);
+  box-shadow: 3px 0 0 v-bind(theme.borderColor), 6px 0 0 v-bind(theme.borderColor);
 }
 
 .sl-item-icon::after {
@@ -243,9 +246,9 @@ onMounted(() => {
   content: '';
   position: absolute;
   left: 1px;
-  bottom: -2px;
-  width: 6px;
-  height: 6px;
+  bottom: -1.5px;
+  width: 4px;
+  height: 4px;
   border-left: 1.5px solid v-bind(theme.borderColor);
   border-bottom: 1.5px solid v-bind(theme.borderColor);
   transform: rotate(-45deg);
