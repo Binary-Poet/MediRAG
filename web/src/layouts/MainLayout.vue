@@ -59,8 +59,11 @@ const menus = [
         </el-menu-item>
       </el-menu>
       <div class="sidebar-footer">
-        <el-avatar :size="28" class="footer-avatar">{{ avatarText }}</el-avatar>
-        <span class="footer-name">{{ displayName }}</span>
+        <el-avatar :size="32" class="footer-avatar">{{ avatarText }}</el-avatar>
+        <div class="footer-info">
+          <span class="footer-name">{{ displayName }}</span>
+          <el-tag v-if="roleLabel" size="small" type="warning" effect="light" class="footer-role">{{ roleLabel }}</el-tag>
+        </div>
       </div>
     </el-aside>
 
@@ -76,7 +79,6 @@ const menus = [
             <span class="user-entry">
               <el-avatar :size="26" class="user-avatar">{{ avatarText }}</el-avatar>
               {{ displayName }}
-              <el-tag v-if="roleLabel" size="small" type="success" effect="plain">{{ roleLabel }}</el-tag>
               <el-icon><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
@@ -147,19 +149,35 @@ const menus = [
 .sidebar-footer {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 14px 20px;
+  gap: 10px;
+  padding: 12px 20px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
 }
 
 .footer-avatar {
   background: #2d6a4f;
-  font-size: 12px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.footer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .footer-name {
   color: #fff;
   font-size: 13px;
+  line-height: 1.2;
+}
+
+.footer-role {
+  align-self: flex-start;
+  --el-tag-padding-horizontal: 6px;
+  --el-tag-font-size: 11px;
 }
 
 .topbar {

@@ -64,3 +64,38 @@ def test_token_signature_is_verified(client):
     # 合法 token 仍可用（未过度收紧）
     assert client.get("/api/auth/me",
                       headers={"Authorization": f"Bearer {tok}"}).status_code == 200
+
+
+def _user1_token(client) -> str:
+    return client.post("/api/auth/login",
+                       json={"username": "user1", "password": "admin123"}).json()["token"]
+
+
+def test_update_profile_requires_token(client):
+    assert client.put("/api/auth/profile", json={"display_name": "x"}).status_code == 401
+
+
+def test_update_profile_persists(client):
+    tok = _user1_token(client)
+    r = client.put("/api/auth/profile", headers={"Authorization": f"Bearer {tok}"},
+                   json={"display_name": "李时珍"})
+    assert r.status_code == 200 and r.json()["display_name"] == "李时珍"
+    # 落库并回读：/me 反映新姓名，用户名与角色不受影响
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {tok}"}).json()
+    assert me["display_name"] == "李时珍"
+    assert me["username"] == "user1" and me["role"] == "知识用户"
+
+
+def test_update_profile_trims_whitespace(client):
+    tok = _user1_token(client)
+    r = client.put("/api/auth/profile", headers={"Authorization": f"Bearer {tok}"},
+                   json={"display_name": "  张三  "})
+    assert r.status_code == 200 and r.json()["display_name"] == "张三"
+
+
+@pytest.mark.parametrize("name", ["", "   ", "甲" * 51])
+def test_update_profile_rejects_invalid_name(client, name):
+    tok = _user1_token(client)
+    r = client.put("/api/auth/profile", headers={"Authorization": f"Bearer {tok}"},
+                   json={"display_name": name})
+    assert r.status_code == 422

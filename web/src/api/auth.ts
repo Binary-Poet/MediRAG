@@ -28,3 +28,15 @@ export async function changePassword(old_password: string, new_password: string,
     throw new Error(detail.detail ?? '修改失败')
   }
 }
+
+export async function updateProfile(display_name: string, token: string): Promise<UserInfo> {
+  const resp = await fetch('/api/auth/profile', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ display_name }),
+  })
+  if (!resp.ok) {
+    const detail = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }))
+    throw new Error(detail.detail ?? '修改失败')
+  }
+  return resp.json()
+}

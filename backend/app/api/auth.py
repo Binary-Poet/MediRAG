@@ -85,3 +85,20 @@ def change_password(body: PasswordBody, u: User = Depends(current_user)) -> dict
         uu = s.get(User, u.id)
         uu.password_hash = _hash(u.username, body.new_password)
     return {"ok": True}
+
+
+class ProfileBody(BaseModel):
+    display_name: str
+
+
+@router.put("/auth/profile")
+def update_profile(body: ProfileBody, u: User = Depends(current_user)) -> dict:
+    name = body.display_name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="姓名不能为空")
+    if len(name) > 50:
+        raise HTTPException(status_code=422, detail="姓名不超过 50 字")
+    with session_scope() as s:
+        uu = s.get(User, u.id)
+        uu.display_name = name
+    return {"id": u.id, "username": u.username, "display_name": name, "role": u.role}
