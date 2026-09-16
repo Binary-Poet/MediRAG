@@ -154,3 +154,36 @@ def chat_stream(body: StreamBody, user: User = Depends(current_user)) -> Streami
         }})
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+class FavoriteBody(BaseModel):
+    favorite: bool
+
+
+@router.get("/chat/sessions")
+def list_sessions(favorite: bool = False, u: User = Depends(current_user)) -> dict:
+    """当前用户的会话列表（updated_at 倒序）+ 全部/收藏统计。"""
+    return chat_session.list_sessions(u.id, favorite_only=favorite)
+
+
+@router.patch("/chat/sessions/{sid}")
+def patch_session(sid: str, body: FavoriteBody, u: User = Depends(current_user)) -> dict:
+    if not chat_session.set_favorite(sid, u.id, body.favorite):
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return {"session_id": sid, "favorite": body.favorite}
+
+
+@router.delete("/chat/sessions/{sid}")
+def remove_session(sid: str, u: User = Depends(current_user)) -> dict:
+    if not chat_session.delete_session(sid, u.id):
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return {"ok": True}
+
+
+@router.get("/chat/sessions/{sid}/messages")
+def session_messages(sid: str, u: User = Depends(current_user)) -> dict:
+    """完整回放：消息按 seq 升序，助手消息带 trace/references/graph_facts/safety。"""
+    msgs = chat_session.load_messages(sid, u.id)
+    if msgs is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return {"session_id": sid, "messages": msgs}
