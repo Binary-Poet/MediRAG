@@ -54,6 +54,6 @@ def session_scope(engine=None):
 
 def init_db(engine=None) -> None:
     """建表（幂等）。应用启动时调用。"""
-    from app.models import document  # noqa: F401  确保模型注册到 Base
+    from app.models import document, inference_config  # noqa: F401  确保模型注册到 Base
 
     Base.metadata.create_all(engine or get_engine())

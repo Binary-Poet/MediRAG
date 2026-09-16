@@ -10,21 +10,28 @@ import httpx
 from app.config import get_settings
 
 
-def _endpoint() -> tuple[str, str, str]:
-    """返回 (base_url, api_key, model)，按当前 vendor 选择。"""
+def _endpoint(vendor: str | None = None, model: str | None = None) -> tuple[str, str, str]:
+    """返回 (base_url, api_key, model)；vendor/model 显式覆盖 settings（推理配置页切模型）。
+    model="qwen-plus" → vendor=qwen；model="deepseek-chat" → vendor=deepseek。"""
     s = get_settings()
-    if s.llm_vendor == "qwen":
+    if model == "qwen-plus":
+        vendor = "qwen"
+    elif model == "deepseek-chat":
+        vendor = "deepseek"
+    vendor = vendor or s.llm_vendor
+    if vendor == "qwen":
         if not s.dashscope_api_key:
             raise RuntimeError("DASHSCOPE_API_KEY 未配置（LLM_VENDOR=qwen）")
-        return s.dashscope_base_url, s.dashscope_api_key, s.llm_model_alt
+        return s.dashscope_base_url, s.dashscope_api_key, model or s.llm_model_alt
     if not s.deepseek_api_key:
         raise RuntimeError("DEEPSEEK_API_KEY 未配置，请在 backend/.env 填入")
-    return s.deepseek_base_url, s.deepseek_api_key, s.llm_model_main
+    return s.deepseek_base_url, s.deepseek_api_key, model or s.llm_model_main
 
 
-def chat_completion(system: str, user: str, temperature: float = 0.3) -> str:
+def chat_completion(system: str, user: str, temperature: float = 0.3,
+                    vendor: str | None = None, model: str | None = None) -> str:
     """单轮对话补全，返回首个 choice 的文本。"""
-    base_url, api_key, model = _endpoint()
+    base_url, api_key, model = _endpoint(vendor=vendor, model=model)
     resp = httpx.post(
         f"{base_url}/chat/completions",
         headers={"Authorization": f"Bearer {api_key}"},
@@ -45,9 +52,10 @@ def chat_completion(system: str, user: str, temperature: float = 0.3) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 
-def chat_completion_stream(system: str, user: str, temperature: float = 0.3):
+def chat_completion_stream(system: str, user: str, temperature: float = 0.3,
+                           vendor: str | None = None, model: str | None = None):
     """流式对话补全：逐 token 产出文本。返回生成器。"""
-    base_url, api_key, model = _endpoint()
+    base_url, api_key, model = _endpoint(vendor=vendor, model=model)
     with httpx.stream(
         "POST", f"{base_url}/chat/completions",
         headers={"Authorization": f"Bearer {api_key}"},

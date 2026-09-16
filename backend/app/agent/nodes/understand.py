@@ -44,7 +44,13 @@ def understand(state: AgentState) -> dict:
         history=history_block, question=state["question"])
 
     try:
-        raw = chat_completion(system="你是中医药问句理解器，只输出 JSON。", user=prompt, temperature=0.1)
+        cfg = state.get("inference") or {}
+        query_temp = float(cfg.get("query_temp", 0.1))
+        # vendor/model 仅在有值时透传（兼容既有三参 mock；无值即回落 settings）
+        llm_kw = {k: v for k, v in (("vendor", cfg.get("vendor")),
+                                    ("model", cfg.get("model"))) if v}
+        raw = chat_completion(system="你是中医药问句理解器，只输出 JSON。", user=prompt,
+                              temperature=query_temp, **llm_kw)
     except RuntimeError:
         raw = ""
     parsed = _parse_understand(raw) if raw else None

@@ -13,10 +13,13 @@ TOOLS = {
 
 def retrieve(state: AgentState) -> dict:
     s = get_settings()
+    cfg = state.get("inference") or {}
     plan = PLAN_MATRIX.get(state["intent"], [])
-    vector_hits = TOOLS["vector_search"].invoke({"query": state["rewritten_query"], "top_k": s.semantic_k}) \
+    vector_hits = TOOLS["vector_search"].invoke({"query": state["rewritten_query"],
+                                                 "top_k": cfg.get("semantic_k", s.semantic_k)}) \
         if "vector_search" in plan else []
-    keyword_hits = TOOLS["keyword_search"].invoke({"query": state["rewritten_query"], "top_k": s.keyword_k}) \
+    keyword_hits = TOOLS["keyword_search"].invoke({"query": state["rewritten_query"],
+                                                   "top_k": cfg.get("keyword_k", s.keyword_k)}) \
         if "keyword_search" in plan else []
     graph_facts = []
     if "graph_search" in plan and state.get("entity_names"):
