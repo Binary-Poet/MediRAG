@@ -48,7 +48,7 @@ const router = createRouter({
         {
           path: 'inference',
           name: 'inference',
-          component: () => import('../views/Placeholder.vue'),
+          component: () => import('../views/config/Inference.vue'),
           meta: { title: '推理配置', breadcrumb: '推理配置', phase: '阶段 5' },
         },
         {
