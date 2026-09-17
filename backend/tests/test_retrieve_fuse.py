@@ -294,3 +294,73 @@ def test_retrieve_graph_facts_tagged_with_entity(monkeypatch):
     monkeypatch.setattr(rmod, "get_settings", lambda: _Cfg())
     upd = rmod.retrieve(_state(intent="complex", entity_names=["麻黄汤"], rewritten_query="麻黄汤组成"))
     assert upd["graph_facts"] == [{"source": "麻黄汤", "relation": "组成", "target": "X", "entity": "麻黄汤"}]
+
+
+# ===== Task 4（查询分解方案）：按子查询对齐精排 =====
+
+def _rrf_single(lists, k=60, weights=None):
+    """固定返回单条候选（忽略入参），用于隔离精排行为。"""
+    return [{"chunk_id": "a", "title": "党参", "text": "补中益气", "rrf_score": 0.3}]
+
+
+def test_fuse_reranks_per_sub_query_and_takes_max(monkeypatch):
+    """2 个子查询 → 精排各调一次；证据分取各子查询 max（例 4 回归：不再被整句压分）。"""
+    seen = []
+
+    def _rerank(q, docs, top_n):
+        seen.append(q)
+        return [{"index": 0, "score": 0.2 if "人参" in q else 0.8}]
+
+    monkeypatch.setattr(fmod, "rrf_fuse", _rrf_single)
+    monkeypatch.setattr(fmod, "rerank", _rerank)
+    monkeypatch.setattr(fmod, "get_settings", lambda: _Cfg())
+    st = _state(rewritten_query="人参、党参、西洋参补气有什么区别",
+                sub_queries=[{"query": "人参 补气 证型", "entities": ["人参"]},
+                             {"query": "党参 补气 证型", "entities": ["党参"]}],
+                vector_hits=[{"chunk_id": "a", "sub_query": 0}],
+                keyword_hits=[{"chunk_id": "a", "sub_query": 1}])
+    upd = fmod.fuse(st)
+    assert seen == ["人参 补气 证型", "党参 补气 证型"]      # 每个子查询各打分一次
+    assert upd["evidence"][0]["score"] == 0.8               # 取 max
+    assert upd["evidence"][0]["matched_queries"] == [0, 1]  # 命中来源子查询
+
+
+def test_fuse_groups_hits_by_sub_query_before_rrf(monkeypatch):
+    """子查询各自的向量/关键词先各自 RRF，候选按 chunk_id 合并去重。"""
+    seen_lists = []
+
+    def _rrf(lists, k=60, weights=None):
+        seen_lists.append([[d["chunk_id"] for d in lst] for lst in lists])
+        return [{"chunk_id": lst[0]["chunk_id"], "title": "t", "text": "x", "rrf_score": 0.5}
+                for lst in lists if lst]
+
+    monkeypatch.setattr(fmod, "rrf_fuse", _rrf)
+    monkeypatch.setattr(fmod, "rerank", lambda q, docs, top_n: [{"index": 0, "score": 0.9}])
+    monkeypatch.setattr(fmod, "get_settings", lambda: _Cfg())
+    st = _state(rewritten_query="a 与 b 的区别",
+                sub_queries=[{"query": "qa", "entities": ["a"]}, {"query": "qb", "entities": ["b"]}],
+                vector_hits=[{"chunk_id": "v0", "sub_query": 0}, {"chunk_id": "v1", "sub_query": 1}],
+                keyword_hits=[{"chunk_id": "k1", "sub_query": 1}])
+    upd = fmod.fuse(st)
+    assert seen_lists == [[["v0"], []], [["v1"], ["k1"]]]   # 按子查询分组：子查询0无关键词命中
+    assert [c["chunk_id"] for c in upd["fused"]] == ["v0", "v1", "k1"]
+
+
+def test_fuse_untagged_hits_fall_back_to_single_query(monkeypatch):
+    """无子查询/无标签（老路径）→ 行为等同改造前：单查询精排。"""
+    seen = []
+
+    def _rerank(q, docs, top_n):
+        seen.append(q)
+        return [{"index": 0, "score": 0.9}, {"index": 1, "score": 0.4}]
+
+    monkeypatch.setattr(fmod, "rrf_fuse", lambda lists, k=60, weights=None: [
+        {"chunk_id": "a", "title": "四君子汤", "text": "组成人参白术茯苓炙甘草", "rrf_score": 0.3},
+        {"chunk_id": "b", "title": "归脾汤", "text": "益气补血", "rrf_score": 0.2},
+    ])
+    monkeypatch.setattr(fmod, "rerank", _rerank)
+    monkeypatch.setattr(fmod, "get_settings", lambda: _Cfg())
+    upd = fmod.fuse(_state(rewritten_query="四君子汤组成",
+                           vector_hits=[{"chunk_id": "a"}], keyword_hits=[{"chunk_id": "b"}]))
+    assert seen == ["四君子汤组成"]                          # 只调一次精排
+    assert [e["chunk_id"] for e in upd["evidence"]] == ["a", "b"]
