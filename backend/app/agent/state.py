@@ -8,6 +8,7 @@ class AgentState(TypedDict):
     session_id: str                   # 会话标识（多轮记忆）
     chat_history: list                # [{"role": "user"|"assistant", "content": str}, ...]
     rewritten_query: str              # 理解/反思后的检索查询
+    sub_queries: list                 # 子查询 [{"query", "entities"}]（查询分解；单查询时仅一项）
     entities: list                    # [{"name", "type", "matched"}, ...]
     entity_names: list                # 实体名的扁平列表（供图谱检索）
     intent: str                       # relation / concept / complex / chitchat
