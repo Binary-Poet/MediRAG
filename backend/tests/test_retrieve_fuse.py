@@ -111,6 +111,7 @@ class _Cfg:
         self.rrf_k = 60
         self.rerank_top_n = 5
         self.evidence_min_score = 0.3
+        self.graph_hop = 2
         for k, v in over.items():
             setattr(self, k, v)
 
@@ -182,3 +183,41 @@ def test_fuse_reads_inference_overrides(monkeypatch):
                  inference={"final_evidence": 2})
     fmod.fuse(st2)
     assert seen["top_n"] == 2        # 最终证据数覆盖精排 top_n（Ruling T1-3 打通）
+
+
+def test_retrieve_concept_with_entities_adds_graph(monkeypatch):
+    calls = []
+
+    class FakeTool:
+        def __init__(self, name):
+            self._name = name
+        def invoke(self, kwargs):
+            calls.append((self._name, dict(kwargs)))
+            return {"fact": self._name}
+
+    monkeypatch.setattr(rmod, "TOOLS", {n: FakeTool(n) for n in ["vector_search", "keyword_search", "graph_search"]})
+    monkeypatch.setattr(rmod, "get_settings", lambda: _Cfg(graph_hop=2))
+    upd = rmod.retrieve(_state(intent="concept", entity_names=["四君子汤", "归脾汤"],
+                               rewritten_query="四君子汤和归脾汤有什么区别"))
+    # concept 但有明确实体 → 补开图谱路（此前只 vector+keyword，图谱证据被丢弃）
+    assert upd["plan"] == ["vector_search", "keyword_search", "graph_search"]
+    g_calls = [c for c in calls if c[0] == "graph_search"]
+    assert len(g_calls) == 2                      # 每个实体各查一次
+    assert {c[1]["entity"] for c in g_calls} == {"四君子汤", "归脾汤"}
+
+
+def test_retrieve_graph_hop_from_settings(monkeypatch):
+    calls_kwargs = []
+
+    class FakeTool:
+        def __init__(self, name):
+            self._name = name
+        def invoke(self, kwargs):
+            calls_kwargs.append((self._name, dict(kwargs)))
+            return {"fact": self._name}
+
+    monkeypatch.setattr(rmod, "TOOLS", {n: FakeTool(n) for n in ["vector_search", "keyword_search", "graph_search"]})
+    monkeypatch.setattr(rmod, "get_settings", lambda: _Cfg(graph_hop=2))
+    rmod.retrieve(_state(intent="complex", entity_names=["心脾两虚"], rewritten_query="心脾两虚的方剂"))
+    kw = dict(calls_kwargs)
+    assert kw["graph_search"]["hop"] == 2         # 多跳激活：hop 读 settings 而非写死 1
