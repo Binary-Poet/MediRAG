@@ -80,3 +80,46 @@ def test_neighbors_restricts_relation_whitelist():
     assert "ALL(r IN relationships(p) WHERE type(r) IN [" in cypher
     for rel in ("组成", "主治", "功效", "禁忌", "表现"):
         assert f"'{rel}'" in cypher
+
+
+# ===== Task 6（查询分解方案）：定向路径模板 =====
+
+def test_directed_paths_symptom_to_formula_counts_cooccurrence():
+    """症状→证候→方剂：按多症状共现计数排序（例 2/5 的「共同指向」推理）。"""
+    driver = _fake_driver(_rx({"source": "心血虚", "relation": "主治", "target": "归脾汤", "hit": 3}))
+    c = GraphClient("bolt://x", "u", "p", driver=driver)
+
+    facts = c.directed_paths("symptom_to_formula", ["胸痛", "心悸", "失眠"])
+
+    assert facts == [{"source": "心血虚", "relation": "主治", "target": "归脾汤", "hit": 3,
+                      "path_template": "symptom_to_formula"}]
+    session = driver.session.return_value.__enter__.return_value
+    cypher = session.run.call_args.args[0]
+    assert "r1:表现" in cypher and "r2:主治" in cypher
+    assert "count(DISTINCT s.name)" in cypher          # 共现计数
+    assert "ORDER BY hit DESC" in cypher
+    assert cypher.count("已发布") >= 5                  # 节点与边都只查已发布（候选不泄漏）
+    assert session.run.call_args.kwargs["names"] == ["胸痛", "心悸", "失眠"]
+
+
+def test_directed_paths_formula_mechanism_expands_effect_edges():
+    """方剂→组成→中药（+中药→功效）：机制链展开为组成/功效两类事实。"""
+    driver = _fake_driver(_rx({"source": "麻黄", "relation": "组成", "target": "麻黄",
+                               "eff_source": "麻黄", "eff_target": "发汗解表"}))
+    c = GraphClient("bolt://x", "u", "p", driver=driver)
+
+    facts = c.directed_paths("formula_mechanism", ["麻黄汤"])
+
+    assert facts == [
+        {"source": "麻黄", "relation": "组成", "target": "麻黄", "path_template": "formula_mechanism"},
+        {"source": "麻黄", "relation": "功效", "target": "发汗解表", "path_template": "formula_mechanism"},
+    ]
+    cypher = driver.session.return_value.__enter__.return_value.run.call_args.args[0]
+    assert "r1:组成" in cypher and "r2:功效" in cypher
+    assert "OPTIONAL MATCH" in cypher                    # 无功效边的中药也要返回组成事实
+
+
+def test_directed_paths_unknown_template_or_empty_names_returns_empty():
+    c = GraphClient("bolt://x", "u", "p", driver=MagicMock())
+    assert c.directed_paths("bogus", ["X"]) == []
+    assert c.directed_paths("symptom_to_formula", []) == []

@@ -1,11 +1,12 @@
 from unittest.mock import MagicMock
 
 import app.agent.tools as tmod
-from app.agent.tools import TOOL_NAMES, graph_search, keyword_search, vector_search
+from app.agent.tools import (TOOL_NAMES, graph_path_search, graph_search,
+                             keyword_search, vector_search)
 
 
 def test_tool_names_set():
-    assert TOOL_NAMES == {"vector_search", "keyword_search", "graph_search"}
+    assert TOOL_NAMES == {"vector_search", "keyword_search", "graph_search", "graph_path_search"}
 
 
 def test_vector_search_invokes_store(monkeypatch):

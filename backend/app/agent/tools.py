@@ -33,4 +33,16 @@ def graph_search(entity: str, hop: int = 1) -> dict:
     return {"entity": entity, "facts": get_graph().neighbors([entity], hop=hop)}
 
 
-TOOL_NAMES = {"vector_search", "keyword_search", "graph_search"}
+@tool
+def graph_path_search(template: str, names: list[str]) -> dict:
+    """定向多跳路径检索：按语义模板走链路，比无向邻居更精准。
+
+    模板：symptom_to_formula（症状→证候→方剂，按多症状共现计数排序）、
+    syndrome_to_formula（多证候→方剂，合病推理）、
+    formula_mechanism（方剂→组成→中药→功效，配伍机制链）。
+    返回 {"template", "facts"}，事实带 path_template 与（共现类模板的）hit。
+    """
+    return {"template": template, "facts": get_graph().directed_paths(template, names)}
+
+
+TOOL_NAMES = {"vector_search", "keyword_search", "graph_search", "graph_path_search"}

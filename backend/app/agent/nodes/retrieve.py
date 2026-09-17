@@ -22,7 +22,36 @@ TOOLS = {
     "vector_search": tool_module.vector_search,
     "keyword_search": tool_module.keyword_search,
     "graph_search": tool_module.graph_search,
+    "graph_path_search": tool_module.graph_path_search,
 }
+
+# 机制类问法：方剂实体 + 这些词 → 走「组成→中药→功效」机制链而非无向 2 跳
+MECHANISM_WORDS = ("为什么", "为何", "机制", "原理", "配伍", "如何体现")
+
+
+def _pick_template(state) -> tuple[str | None, list[str]]:
+    """按实体类型与意图确定性选择定向路径模板（不走 LLM，可测可复现）。
+
+    - 全部为症状（complex/compare）→ 症状→证候→方剂（多症状共现）
+    - 全部为证候（complex/compare）→ 多证候→方剂（合病/复合证型）
+    - 含方剂实体且问句带机制词 → 方剂→组成→中药→功效（配伍机制链）
+    - 其余 → 无向邻居（现状）
+    """
+    by_type: dict[str, list[str]] = {}
+    for e in state.get("entities") or []:
+        if isinstance(e, dict) and e.get("name") and e.get("type"):
+            by_type.setdefault(e["type"], []).append(e["name"])
+    intent = state["intent"]
+    if intent in ("complex", "compare") and len(by_type) == 1:
+        if "症状" in by_type:
+            return "symptom_to_formula", by_type["症状"]
+        if "证候" in by_type:
+            return "syndrome_to_formula", by_type["证候"]
+    if by_type.get("方剂"):
+        text = f"{state.get('question') or ''} {state.get('rewritten_query') or ''}"
+        if any(w in text for w in MECHANISM_WORDS):
+            return "formula_mechanism", by_type["方剂"]
+    return None, []
 
 
 def _guard(fn, default):
@@ -77,6 +106,7 @@ def retrieve(state: AgentState) -> dict:
     # 图谱实体：全局实体 ∪ 各子查询实体（保序去重）
     graph_entities = list(dict.fromkeys(
         entity_names + [e for sq in sub_queries for e in sq.get("entities", [])]))
+    template, template_names = _pick_template(state)
 
     def _vector(sub_idx, q):
         return _tag(TOOLS["vector_search"].invoke(
@@ -87,6 +117,9 @@ def retrieve(state: AgentState) -> dict:
             {"query": q, "top_k": cfg.get("keyword_k", s.keyword_k)}), sub_idx)
 
     def _graph():
+        if template:
+            out = TOOLS["graph_path_search"].invoke({"template": template, "names": template_names})
+            return list(out.get("facts", []))
         facts = []
         for name in graph_entities:
             out = TOOLS["graph_search"].invoke({"entity": name, "hop": s.graph_hop})
@@ -106,7 +139,7 @@ def retrieve(state: AgentState) -> dict:
             if "keyword_search" in plan:
                 jobs[("keyword", i)] = ex.submit(
                     _guard, lambda i=i, q=sq["query"]: _keyword(i, q), [])
-        if "graph_search" in plan and graph_entities:
+        if "graph_search" in plan and (graph_entities or template_names):
             jobs[("graph", 0)] = ex.submit(_guard, _graph, [])
         # 按子查询下标顺序汇聚，保证结果顺序与子查询一致（线程完成顺序无关）
         vector_hits = [h for i in range(len(sub_queries)) if ("vector", i) in jobs
@@ -114,7 +147,13 @@ def retrieve(state: AgentState) -> dict:
         keyword_hits = [h for i in range(len(sub_queries)) if ("keyword", i) in jobs
                         for h in jobs[("keyword", i)].result()]
         graph_facts = jobs[("graph", 0)].result() if ("graph", 0) in jobs else []
-    graph_facts, dropped_n = _anchor_facts(graph_facts, graph_entities) if graph_facts else ([], 0)
+    # 模板事实端点本就是链路下游节点（证候/方剂/功效），不是查询实体；锚定过滤只适用于无向邻居
+    if template:
+        dropped_n = 0
+    elif graph_facts:
+        graph_facts, dropped_n = _anchor_facts(graph_facts, graph_entities)
+    else:
+        dropped_n = 0
 
     trace_evt = {
         "step": "retrieve",
@@ -125,6 +164,7 @@ def retrieve(state: AgentState) -> dict:
         "entity_n": len(graph_entities),
         "entities": graph_entities,
         "sub_query_n": len(sub_queries),
+        "path_template": template,
     }
     return {
         "plan": plan,
