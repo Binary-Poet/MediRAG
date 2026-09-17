@@ -33,9 +33,13 @@ def _guard(fn, default):
 def retrieve(state: AgentState) -> dict:
     s = get_settings()
     cfg = state.get("inference") or {}
-    plan = PLAN_MATRIX.get(state["intent"], [])
+    plan = list(PLAN_MATRIX.get(state["intent"], []))
     query = state["rewritten_query"]
     entity_names = state.get("entity_names") or []
+    # concept 类比较问题若抽到明确实体（如「四君子汤与归脾汤的区别」），补开图谱路
+    # 让组成/功效等事实参与比较——否则图谱证据被静默丢弃（PLAN_MATRIX 需复制再改）。
+    if state["intent"] == "concept" and entity_names and "graph_search" not in plan:
+        plan.append("graph_search")
 
     def _vector():
         return TOOLS["vector_search"].invoke({"query": query,
@@ -48,7 +52,7 @@ def retrieve(state: AgentState) -> dict:
     def _graph():
         facts = []
         for name in entity_names:
-            out = TOOLS["graph_search"].invoke({"entity": name, "hop": 1})
+            out = TOOLS["graph_search"].invoke({"entity": name, "hop": s.graph_hop})
             facts.extend(out.get("facts", []))
         return facts
 
