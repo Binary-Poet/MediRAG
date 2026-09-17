@@ -1,10 +1,17 @@
 """Neo4j 客户端：连接管理与 1~2 跳图谱查询。
 
 只查询 status='已发布' 的节点**与关系**（候选审核闭环：候选节点/候选边均不进问答）。
+2 跳遍历收紧为只走语义关系白名单（与浏览接口同源，防 fan-out 噪声）：中间边越白名单
+会让「症状→无关证候→无关方剂」这类旁支混进问答证据。
 """
 from neo4j import GraphDatabase
 
 from app.config import get_settings
+from app.graph.extractor import VALID_RELATIONS
+
+# 关系白名单的唯一真源是抽取侧 VALID_RELATIONS；sorted 保证 Cypher 文本跨进程稳定
+# （set 迭代序受 PYTHONHASHSEED 影响）。可信 Python 常量拼接，无注入面。
+RELATIONS_LITERAL = ",".join(f"'{r}'" for r in sorted(VALID_RELATIONS))
 
 
 class GraphClient:
@@ -43,6 +50,7 @@ class GraphClient:
         cypher = f"""
         MATCH p = (a)-[*1..{hop}]-(b)
         WHERE a.name IN $names AND a.status = '已发布' AND b.status = '已发布'
+        AND ALL(r IN relationships(p) WHERE type(r) IN [{RELATIONS_LITERAL}])
         UNWIND relationships(p) AS r
         WITH r WHERE r.status = '已发布'
         RETURN DISTINCT startNode(r).name AS source, type(r) AS relation,

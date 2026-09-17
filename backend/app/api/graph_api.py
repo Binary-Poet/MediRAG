@@ -3,16 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.api.auth import current_user
-from app.graph.extractor import VALID_RELATIONS
 from app.graph.importer import import_seed
-from app.graph.neo4j_client import get_graph
+from app.graph.neo4j_client import RELATIONS_LITERAL, get_graph
 from app.models.user import User
 
 router = APIRouter()
 
-# 2-hop 语义关系白名单：由抽取侧唯一真源 VALID_RELATIONS 构造（可信 Python 常量，无注入面；
-# sorted 保证 Cypher 文本跨进程稳定——set 迭代序受 PYTHONHASHSEED 影响）。
-_RELATIONS_LITERAL = ",".join(f"'{r}'" for r in sorted(VALID_RELATIONS))
+# 2-hop 语义关系白名单与问答路（GraphClient.neighbors）同源，统一在 neo4j_client 构造。
+_RELATIONS_LITERAL = RELATIONS_LITERAL
 
 
 def _read(cypher: str, **params) -> list[dict]:

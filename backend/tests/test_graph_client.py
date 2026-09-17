@@ -69,3 +69,14 @@ def test_neighbors_clamps_hop_to_1_2():
     c.neighbors(["人参"], hop=5)
     cypher = driver.session.return_value.__enter__.return_value.run.call_args.args[0]
     assert "[*1..2]" in cypher
+
+
+def test_neighbors_restricts_relation_whitelist():
+    """问答路 2 跳遍历必须与浏览路同源收紧：中间边只允许 VALID_RELATIONS（防 fan-out 噪声）。"""
+    driver = _fake_driver(_rx())
+    c = GraphClient("bolt://x", "u", "p", driver=driver)
+    c.neighbors(["四君子汤"], hop=2)
+    cypher = driver.session.return_value.__enter__.return_value.run.call_args.args[0]
+    assert "ALL(r IN relationships(p) WHERE type(r) IN [" in cypher
+    for rel in ("组成", "主治", "功效", "禁忌", "表现"):
+        assert f"'{rel}'" in cypher

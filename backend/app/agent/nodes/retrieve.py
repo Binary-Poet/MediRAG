@@ -43,6 +43,24 @@ def _tag(hits, sub_idx: int):
     return hits
 
 
+def _anchor_facts(facts: list, entities: list[str]) -> tuple[list, int]:
+    """图谱事实锚定过滤，返回 (保留事实, 剔除条数)。
+
+    hop=2 无向遍历会带回与查询实体无关的旁支；而只按「端点命中查询实体」过滤又会误杀
+    链路的第二跳（如 证候→方剂 两端都不是查询实体），把多跳价值砍掉。故以「一跳邻域
+    节点集合」为锚：保留 1 跳事实，以及锚定在该邻域上的第二跳事实，其余剔除。
+    """
+    anchor = set(entities)
+    near: set = set()
+    for f in facts:
+        if isinstance(f, dict) and {f.get("source"), f.get("target")} & anchor:
+            near |= {f.get("source"), f.get("target")}
+    keep_scope = anchor | near
+    kept = [f for f in facts
+            if isinstance(f, dict) and {f.get("source"), f.get("target")} & keep_scope]
+    return kept, len(facts) - len(kept)
+
+
 def retrieve(state: AgentState) -> dict:
     s = get_settings()
     cfg = state.get("inference") or {}
@@ -96,12 +114,14 @@ def retrieve(state: AgentState) -> dict:
         keyword_hits = [h for i in range(len(sub_queries)) if ("keyword", i) in jobs
                         for h in jobs[("keyword", i)].result()]
         graph_facts = jobs[("graph", 0)].result() if ("graph", 0) in jobs else []
+    graph_facts, dropped_n = _anchor_facts(graph_facts, graph_entities) if graph_facts else ([], 0)
 
     trace_evt = {
         "step": "retrieve",
         "vector_n": len(vector_hits),
         "keyword_n": len(keyword_hits),
         "graph_n": len(graph_facts),
+        "graph_dropped_n": dropped_n,
         "entity_n": len(graph_entities),
         "entities": graph_entities,
         "sub_query_n": len(sub_queries),
