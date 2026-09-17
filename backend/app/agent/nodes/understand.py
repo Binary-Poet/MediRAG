@@ -112,6 +112,8 @@ def understand(state: AgentState) -> dict:
         "entities": entity_names,
         "intent": parsed["intent"],
         "sub_query_n": len(sub_queries),
+        # 子查询摘要供前端 trace 展示（演示可追溯性）：只放查询词，不带实体等长字段
+        "sub_queries": [sq["query"] for sq in sub_queries],
     }
     return {
         "rewritten_query": parsed["rewritten_query"] or state["question"],

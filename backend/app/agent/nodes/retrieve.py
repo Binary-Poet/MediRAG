@@ -34,8 +34,12 @@ def _pick_template(state) -> tuple[str | None, list[str]]:
 
     - 全部为症状（complex/compare）→ 症状→证候→方剂（多症状共现）
     - 全部为证候（complex/compare）→ 多证候→方剂（合病/复合证型）
-    - 含方剂实体且问句带机制词 → 方剂→组成→中药→功效（配伍机制链）
-    - 其余 → 无向邻居（现状）
+    - 含方剂实体 + 机制词 + **非 compare** → 方剂→组成→中药→功效（配伍机制链）
+    - 其余（含 compare 的方剂问题）→ 无向邻居
+
+    compare 不吃机制模板：机制链只回 组成/功效，「A 和 B 在主治和配伍上有什么区别」这类
+    问题恰好在比主治，走机制链会把要对的轴削掉；而 hop=2 无向邻居是机制链的超集
+    （方剂-组成-中药 一跳 + 中药-功效 二跳，另有主治/禁忌），对称且更全。
     """
     by_type: dict[str, list[str]] = {}
     for e in state.get("entities") or []:
@@ -47,7 +51,7 @@ def _pick_template(state) -> tuple[str | None, list[str]]:
             return "symptom_to_formula", by_type["症状"]
         if "证候" in by_type:
             return "syndrome_to_formula", by_type["证候"]
-    if by_type.get("方剂"):
+    if intent != "compare" and by_type.get("方剂"):
         text = f"{state.get('question') or ''} {state.get('rewritten_query') or ''}"
         if any(w in text for w in MECHANISM_WORDS):
             return "formula_mechanism", by_type["方剂"]

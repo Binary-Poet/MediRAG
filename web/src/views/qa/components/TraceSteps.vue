@@ -43,6 +43,16 @@ const retrieve = computed(() => ev('retrieve'))
 const fuse = computed(() => ev('fuse'))
 const rerank = computed(() => ev('rerank'))
 const reflect = computed(() => ev('reflect'))
+
+/** 图谱定向路径模板的中文说明（后端 path_template 枚举，未知值原样兜底） */
+const TEMPLATE_LABELS: Record<string, string> = {
+  symptom_to_formula: '症状 → 证候 → 方剂（多症状共现排序）',
+  syndrome_to_formula: '证候 → 方剂（合病/复合证型）',
+  formula_mechanism: '方剂 → 组成 → 中药 → 功效（配伍机制链）',
+}
+function templateLabel(t: string): string {
+  return TEMPLATE_LABELS[t] || t
+}
 </script>
 
 <template>
@@ -77,6 +87,13 @@ const reflect = computed(() => ev('reflect'))
       <el-tag v-for="e in understand.entities" :key="e" size="small" class="tag">{{ e }}</el-tag>
       <span v-if="!understand.entities?.length" class="muted">（未识别）</span>
     </div>
+    <!-- 查询分解：复合意图拆成多个子查询时展示，单查询不显示（避免小题大做） -->
+    <div v-if="(understand.sub_queries?.length ?? 0) > 1" class="entity-line">
+      查询分解（{{ understand.sub_queries!.length }} 个子查询）：
+      <el-tag v-for="(q, i) in understand.sub_queries" :key="i" size="small" class="tag">
+        {{ q }}
+      </el-tag>
+    </div>
   </div>
 
   <!-- 步骤 2-3：4 数字卡 + 自反思提示 -->
@@ -99,6 +116,11 @@ const reflect = computed(() => ev('reflect'))
         <div class="num">{{ fuse?.candidate_n ?? '—' }}</div>
         <div class="num-label">证据融合（{{ fuse?.method ?? '—' }}）</div>
       </div>
+    </div>
+    <!-- 图谱定向路径模板：解释「图谱这次怎么走的」（无向邻居时不显示） -->
+    <div v-if="retrieve?.path_template" class="reflect-line">
+      图谱路径模板：{{ templateLabel(retrieve.path_template) }}
+      <span v-if="retrieve.graph_dropped_n">，锚定过滤剔除 {{ retrieve.graph_dropped_n }} 条旁支</span>
     </div>
     <!-- 自反思触发时显示一轮「重查」提示（合并方案扩充项） -->
     <div v-if="reflect" class="reflect-line">

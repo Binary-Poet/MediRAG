@@ -148,3 +148,30 @@ def test_retrieve_falls_back_to_neighbors_for_mixed_types(monkeypatch):
     assert not [c for c in calls if c[0] == "graph_path_search"]
     assert sorted(c[1]["entity"] for c in calls if c[0] == "graph_search") == ["人参", "四君子汤"]
     assert out["trace"][0]["path_template"] is None
+
+
+def test_retrieve_compare_formula_skips_mechanism_template(monkeypatch):
+    """compare 的方剂问题不吃机制模板：问句含「配伍」也只比 组成/功效 会削掉主治这一对比轴。"""
+    calls = []
+    _patch_tools(monkeypatch, calls)
+    out = rmod.retrieve({
+        "intent": "compare", "rewritten_query": "麻黄汤 桂枝汤 主治 配伍 区别",
+        "question": "麻黄汤和桂枝汤在主治和配伍上有什么区别？",
+        "entity_names": ["麻黄汤", "桂枝汤"],
+        "entities": [{"name": "麻黄汤", "type": "方剂"}, {"name": "桂枝汤", "type": "方剂"}]})
+    assert not [c for c in calls if c[0] == "graph_path_search"]
+    assert sorted(c[1]["entity"] for c in calls if c[0] == "graph_search") == ["桂枝汤", "麻黄汤"]
+    assert out["trace"][0]["path_template"] is None
+
+
+def test_retrieve_mechanism_template_still_used_for_non_compare(monkeypatch):
+    """同样的机制词在 complex 下仍走机制链（compare 是唯一例外）。"""
+    calls = []
+    _patch_tools(monkeypatch, calls)
+    out = rmod.retrieve({
+        "intent": "complex", "rewritten_query": "麻黄汤 配伍 机制",
+        "question": "为什么麻黄汤能治太阳伤寒？配伍如何体现？",
+        "entity_names": ["麻黄汤"], "entities": [{"name": "麻黄汤", "type": "方剂"}]})
+    assert [c for c in calls if c[0] == "graph_path_search"] == [
+        ("graph_path_search", {"template": "formula_mechanism", "names": ["麻黄汤"]})]
+    assert out["trace"][0]["path_template"] == "formula_mechanism"

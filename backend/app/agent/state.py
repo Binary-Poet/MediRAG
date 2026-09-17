@@ -11,7 +11,7 @@ class AgentState(TypedDict):
     sub_queries: list                 # 子查询 [{"query", "entities"}]（查询分解；单查询时仅一项）
     entities: list                    # [{"name", "type", "matched"}, ...]
     entity_names: list                # 实体名的扁平列表（供图谱检索）
-    intent: str                       # relation / concept / complex / chitchat
+    intent: str                       # relation / concept / complex / compare / chitchat
     plan: list                        # 本次路由的工具名列表（vector_search / keyword_search / graph_search）
     vector_hits: list                 # 向量召回
     keyword_hits: list                # 关键词召回

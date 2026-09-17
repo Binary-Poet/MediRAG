@@ -21,6 +21,11 @@ export interface StepEvent {
   rewritten?: string
   entities?: string[]
   intent?: string
+  sub_query_n?: number    // 查询分解出的子查询数（复合意图 > 1）
+  sub_queries?: string[]  // 子查询词摘要，悬浮展示分解结果
+  path_template?: string | null   // 图谱走的定向路径模板，为空即无向邻居
+  graph_dropped_n?: number        // 锚定过滤剔除的旁支事实数
+  matched_queries?: number[]
   vector_n?: number
   keyword_n?: number
   graph_n?: number
