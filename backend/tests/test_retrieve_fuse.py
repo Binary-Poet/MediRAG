@@ -21,12 +21,14 @@ def test_plan_matrix_routing():
     assert PLAN_MATRIX["relation"] == ["vector_search", "graph_search"]
     assert PLAN_MATRIX["concept"] == ["vector_search", "keyword_search"]
     assert PLAN_MATRIX["complex"] == ["vector_search", "keyword_search", "graph_search"]
+    assert PLAN_MATRIX["compare"] == ["vector_search", "keyword_search", "graph_search"]
     assert PLAN_MATRIX["chitchat"] == []
 
 
 def test_route_returns_safety_for_chitchat():
     assert route(_state(intent="chitchat")) == "safety"
     assert route(_state(intent="relation")) == "retrieve"
+    assert route(_state(intent="compare")) == "retrieve"   # 比较意图进检索，不走兜底
 
 
 def test_retrieve_invokes_tools_per_plan(monkeypatch):
@@ -221,3 +223,74 @@ def test_retrieve_graph_hop_from_settings(monkeypatch):
     rmod.retrieve(_state(intent="complex", entity_names=["心脾两虚"], rewritten_query="心脾两虚的方剂"))
     kw = dict(calls_kwargs)
     assert kw["graph_search"]["hop"] == 2         # 多跳激活：hop 读 settings 而非写死 1
+
+
+# ===== Task 3（查询分解方案）：子查询扇出 + 命中打标 =====
+
+class _TagTool:
+    """记录调用的 Fake 工具：vector/keyword 返回带子查询可辨识的 hit，graph 返回事实。"""
+
+    def __init__(self, name, calls):
+        self._name = name
+        self._calls = calls
+
+    def invoke(self, kwargs):
+        self._calls.append((self._name, dict(kwargs)))
+        if self._name == "graph_search":
+            return {"entity": kwargs["entity"],
+                    "facts": [{"source": kwargs["entity"], "relation": "组成", "target": "X"}]}
+        return [{"chunk_id": f"{kwargs['query']}-hit", "text": "..."}]
+
+
+def test_retrieve_fans_out_per_sub_query(monkeypatch):
+    """compare 两个实体 → 向量/关键词各查 2 次（每子查询一次），命中带 sub_query 下标（例 1 回归）。"""
+    calls = []
+    monkeypatch.setattr(rmod, "TOOLS", {n: _TagTool(n, calls) for n in ["vector_search", "keyword_search", "graph_search"]})
+    monkeypatch.setattr(rmod, "get_settings", lambda: _Cfg())
+    st = _state(intent="compare", entity_names=["麻黄汤", "桂枝汤"],
+                rewritten_query="麻黄汤和桂枝汤的区别",
+                sub_queries=[{"query": "麻黄汤 组成 主治", "entities": ["麻黄汤"]},
+                             {"query": "桂枝汤 组成 主治", "entities": ["桂枝汤"]}])
+    upd = rmod.retrieve(st)
+    v_queries = sorted(c[1]["query"] for c in calls if c[0] == "vector_search")
+    k_queries = sorted(c[1]["query"] for c in calls if c[0] == "keyword_search")
+    assert v_queries == ["桂枝汤 组成 主治", "麻黄汤 组成 主治"]
+    assert k_queries == ["桂枝汤 组成 主治", "麻黄汤 组成 主治"]
+    # 每条命中带子查询下标，且按下标顺序汇聚
+    assert upd["vector_hits"] == [
+        {"chunk_id": "麻黄汤 组成 主治-hit", "text": "...", "sub_query": 0},
+        {"chunk_id": "桂枝汤 组成 主治-hit", "text": "...", "sub_query": 1}]
+    assert upd["trace"][0]["sub_query_n"] == 2
+
+
+def test_retrieve_sub_queries_fallback_single(monkeypatch):
+    """state 无 sub_queries（直接构造/兜底路径）→ 回落单查询，行为等同改造前。"""
+    calls = []
+    monkeypatch.setattr(rmod, "TOOLS", {n: _TagTool(n, calls) for n in ["vector_search", "keyword_search", "graph_search"]})
+    monkeypatch.setattr(rmod, "get_settings", lambda: _Cfg())
+    upd = rmod.retrieve(_state(intent="concept", entity_names=[], rewritten_query="风寒束表 风热犯表"))
+    assert [c[1]["query"] for c in calls if c[0] == "vector_search"] == ["风寒束表 风热犯表"]
+    assert upd["vector_hits"][0]["sub_query"] == 0
+    assert upd["trace"][0]["sub_query_n"] == 1
+
+
+def test_retrieve_graph_entities_union_sub_queries(monkeypatch):
+    """图谱实体 = 全局实体 ∪ 子查询实体（保序去重）：子查询独有的实体也进图谱。"""
+    calls = []
+    monkeypatch.setattr(rmod, "TOOLS", {n: _TagTool(n, calls) for n in ["vector_search", "keyword_search", "graph_search"]})
+    monkeypatch.setattr(rmod, "get_settings", lambda: _Cfg())
+    rmod.retrieve(_state(intent="compare", entity_names=["麻黄汤"],
+                         rewritten_query="麻黄汤和桂枝汤区别",
+                         sub_queries=[{"query": "麻黄汤 组成", "entities": ["麻黄汤"]},
+                                      {"query": "桂枝汤 组成", "entities": ["桂枝汤"]}]))
+    g_entities = sorted(c[1]["entity"] for c in calls if c[0] == "graph_search")
+    assert g_entities == ["桂枝汤", "麻黄汤"]            # 桂枝汤仅存在于子查询，也查图谱
+
+
+def test_retrieve_graph_facts_tagged_with_entity(monkeypatch):
+    """图谱事实带来源实体标签（供 compare 分组与相关性过滤）。"""
+    calls = []
+    monkeypatch.setattr(rmod, "TOOLS", {n: _TagTool(n, calls) for n in ["vector_search", "keyword_search", "graph_search"]})
+    monkeypatch.setattr(rmod, "get_settings", lambda: _Cfg())
+    upd = rmod.retrieve(_state(intent="complex", entity_names=["麻黄汤"], rewritten_query="麻黄汤组成"))
+    assert upd["graph_facts"] == [{"source": "麻黄汤", "relation": "组成", "target": "X", "entity": "麻黄汤"}]

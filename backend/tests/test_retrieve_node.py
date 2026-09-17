@@ -21,10 +21,12 @@ def test_retrieve_degrades_failed_channel(monkeypatch):
     out = rmod.retrieve(state)
 
     assert out["vector_hits"] == []
-    assert out["keyword_hits"] == [{"chunk_id": "k1"}]
-    assert out["graph_facts"] == [{"source": "四君子汤", "relation": "组成", "target": "人参"}]
+    # 命中带子查询下标（查询分解方案：单查询回落 → 恒为 0）
+    assert out["keyword_hits"] == [{"chunk_id": "k1", "sub_query": 0}]
+    assert out["graph_facts"] == [{"source": "四君子汤", "relation": "组成", "target": "人参",
+                                   "entity": "四君子汤"}]
     assert out["trace"][0] == {"step": "retrieve", "vector_n": 0, "keyword_n": 1, "graph_n": 1,
-                               "entity_n": 1, "entities": ["四君子汤"]}
+                               "entity_n": 1, "entities": ["四君子汤"], "sub_query_n": 1}
 
 
 def test_retrieve_graph_channel_degrades_alone(monkeypatch):
@@ -42,7 +44,7 @@ def test_retrieve_graph_channel_degrades_alone(monkeypatch):
     state = {"intent": "complex", "rewritten_query": "q", "entity_names": ["四君子汤"]}
     out = rmod.retrieve(state)
 
-    assert out["vector_hits"] == [{"chunk_id": "v1"}]
-    assert out["keyword_hits"] == [{"chunk_id": "w1"}]
+    assert out["vector_hits"] == [{"chunk_id": "v1", "sub_query": 0}]
+    assert out["keyword_hits"] == [{"chunk_id": "w1", "sub_query": 0}]
     assert out["graph_facts"] == []
     assert out["trace"][0]["graph_n"] == 0

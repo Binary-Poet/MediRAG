@@ -4,6 +4,7 @@ PLAN_MATRIX = {
     "relation": ["vector_search", "graph_search"],
     "concept": ["vector_search", "keyword_search"],
     "complex": ["vector_search", "keyword_search", "graph_search"],
+    "compare": ["vector_search", "keyword_search", "graph_search"],
     "chitchat": [],
 }
 
