@@ -20,6 +20,8 @@ class AgentState(TypedDict):
     evidence: list                    # rerank 后最终证据
     confidence: float                 # max(evidence.score)
     low_confidence: bool              # 阈值判定
+    sub_query_covered: list           # 各子查询是否有过阈证据（覆盖度；compare 据此标注无依据的实体）
+    sub_query_scores: list            # 各子查询的精排最高分（覆盖度原始信号，供调阈值与排查）
     reflect_count: int                # 自反思轮次（硬上限 1）
     safety_flag: str | None           # emergency / low_confidence / ok
     safety_message: str               # 急救提示或拒答话术（safety 节点产出）

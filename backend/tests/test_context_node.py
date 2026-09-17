@@ -48,3 +48,24 @@ def test_context_compare_without_evidence():
           "evidence": [], "graph_facts": []}
     prompt = cmod.context(st)["prompt"]
     assert "（无）" in prompt
+
+
+def test_context_marks_uncovered_entity_explicitly():
+    """覆盖度不足的实体显式写「未检索到依据」，缺口写明强于让模型从「块不存在」去推断。
+
+    这不是凭空多出的分支：演示库仅 13 条切片，西洋参这类库里没有的实体照样会被
+    matched_queries 命中全库，光看命中分不出有无依据——只有 fuse 的按子查询精排分能分。
+    """
+    st = {
+        "intent": "compare", "question": "人参、党参、西洋参补气有什么区别",
+        "sub_queries": [{"query": "人参 补气", "entities": ["人参"]},
+                        {"query": "西洋参 补气", "entities": ["西洋参"]}],
+        "evidence": [_ev("人参", [0, 1], "a")],
+        "sub_query_covered": [True, False],
+        "graph_facts": [],
+    }
+    prompt = cmod.context(st)["prompt"]
+
+    assert "【人参】" in prompt and "【西洋参】" in prompt
+    assert "（知识库中未检索到与「西洋参」相关的可靠依据）" in prompt
+    assert "[1] 《伤寒论》" in prompt                     # 有依据的一方仍带编号

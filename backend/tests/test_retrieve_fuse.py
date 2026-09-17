@@ -113,6 +113,7 @@ class _Cfg:
         self.rrf_k = 60
         self.rerank_top_n = 5
         self.evidence_min_score = 0.3
+        self.coverage_min_score = 0.6
         self.graph_hop = 2
         for k, v in over.items():
             setattr(self, k, v)
@@ -364,3 +365,97 @@ def test_fuse_untagged_hits_fall_back_to_single_query(monkeypatch):
                            vector_hits=[{"chunk_id": "a"}], keyword_hits=[{"chunk_id": "b"}]))
     assert seen == ["四君子汤组成"]                          # 只调一次精排
     assert [e["chunk_id"] for e in upd["evidence"]] == ["a", "b"]
+
+
+# ===== 覆盖度（部分实体无依据）=====
+
+def _three_way(**over):
+    """人参/党参/西洋参三联比较：演示库里只有人参有依据的复现状态。"""
+    st = dict(intent="compare", rewritten_query="人参、党参、西洋参补气有什么区别",
+              sub_queries=[{"query": "人参 补气 证型", "entities": ["人参"]},
+                           {"query": "党参 补气 证型", "entities": ["党参"]},
+                           {"query": "西洋参 补气 证型", "entities": ["西洋参"]}],
+              vector_hits=[{"chunk_id": "a", "sub_query": 0}],
+              keyword_hits=[{"chunk_id": "a", "sub_query": 0}])
+    st.update(over)
+    return _state(**st)
+
+
+def _status(upd):
+    return next(e for e in upd["trace"] if e["step"] == "rerank")
+
+
+def test_fuse_compare_partial_coverage_marks_missing_entities(monkeypatch):
+    """compare 只有一方有依据：置信度照旧是全局 max，但状态必须降级（例 4 回归）。
+
+    实测「人参、党参、西洋参」只有人参查到依据，confidence 却 0.9626、显示「证据充分」，
+    用户会以为三方都比过了。覆盖度与置信度正交：不调小置信度以免误触拒答。
+    """
+    monkeypatch.setattr(fmod, "rrf_fuse", _rrf_single)
+    monkeypatch.setattr(fmod, "rerank",
+                        lambda q, docs, top_n: [{"index": 0, "score": 0.96 if "人参" in q else 0.15}])
+    monkeypatch.setattr(fmod, "get_settings", lambda: _Cfg())
+    upd = fmod.fuse(_three_way())
+
+    assert upd["confidence"] == 0.96                        # 全局 max 不变
+    assert upd["low_confidence"] is False                   # 不因覆盖不足触发拒答
+    assert upd["sub_query_covered"] == [True, False, False]
+    assert _status(upd)["covered_n"] == 1 and _status(upd)["sub_query_n"] == 3
+    assert _status(upd)["status"] == "部分实体无依据（1/3）"
+    # 每个子查询都命中了全部候选：matched_queries 恒为 [0,1,2]，毫无区分度。
+    # 覆盖度若改由 matched_queries 推导会得到 3/3——正是要避免的假信号。
+    assert upd["evidence"][0]["matched_queries"] == [0, 1, 2]
+
+
+def test_fuse_compare_full_coverage_keeps_status(monkeypatch):
+    """三方都有过阈证据 → 状态不变，不得无谓降级。"""
+    monkeypatch.setattr(fmod, "rrf_fuse", _rrf_single)
+    monkeypatch.setattr(fmod, "rerank", lambda q, docs, top_n: [{"index": 0, "score": 0.9}])
+    monkeypatch.setattr(fmod, "get_settings", lambda: _Cfg())
+    upd = fmod.fuse(_three_way())
+
+    assert upd["sub_query_covered"] == [True, True, True]
+    assert _status(upd)["status"] == "证据充分，正常生成"
+
+
+def test_fuse_partial_coverage_only_applies_to_compare(monkeypatch):
+    """非 compare（complex 多子查询）不降级：那是「一个问题的多个方面」，不是待对比的实体。"""
+    monkeypatch.setattr(fmod, "rrf_fuse", _rrf_single)
+    monkeypatch.setattr(fmod, "rerank",
+                        lambda q, docs, top_n: [{"index": 0, "score": 0.9 if "人参" in q else 0.15}])
+    monkeypatch.setattr(fmod, "get_settings", lambda: _Cfg())
+    upd = fmod.fuse(_three_way(intent="complex"))
+
+    assert upd["sub_query_covered"] == [True, False, False]  # 覆盖度照样记录
+    assert _status(upd)["status"] == "证据充分，正常生成"      # 但不影响状态
+
+
+def test_fuse_coverage_uses_its_own_threshold_not_reject_threshold(monkeypatch):
+    """覆盖度阈值必须严于拒答阈值：实测库里没内容的子查询也能蹭到 0.37~0.44 分。
+
+    0.45 分既高于拒答阈值 0.3（不拒答）、又低于覆盖阈值 0.6（该实体没有依据）——
+    两者若共用一个阈值，这类「近义蹭分」会被当成有依据，正是要防的假信号。
+    """
+    monkeypatch.setattr(fmod, "rrf_fuse", _rrf_single)
+    monkeypatch.setattr(fmod, "rerank",
+                        lambda q, docs, top_n: [{"index": 0, "score": 0.95 if "人参" in q else 0.45}])
+    monkeypatch.setattr(fmod, "get_settings", lambda: _Cfg())
+    upd = fmod.fuse(_three_way())
+
+    assert upd["low_confidence"] is False                     # 0.95 远高于拒答阈值
+    assert upd["confidence"] == 0.95
+    assert upd["sub_query_covered"] == [True, False, False]   # 0.45 < 0.6 → 无依据
+    assert upd["sub_query_scores"] == [0.95, 0.45, 0.45]
+    assert _status(upd)["status"] == "部分实体无依据（1/3）"
+
+
+def test_fuse_coverage_all_false_when_below_threshold(monkeypatch):
+    """全部子查询都低于阈值 → covered 全 False，但状态走「知识库未匹配」而非「部分」分支。"""
+    monkeypatch.setattr(fmod, "rrf_fuse", _rrf_single)
+    monkeypatch.setattr(fmod, "rerank", lambda q, docs, top_n: [{"index": 0, "score": 0.15}])
+    monkeypatch.setattr(fmod, "get_settings", lambda: _Cfg())
+    upd = fmod.fuse(_three_way())
+
+    assert upd["sub_query_covered"] == [False, False, False]
+    assert upd["low_confidence"] is True
+    assert _status(upd)["status"] == "知识库未匹配"
