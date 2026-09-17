@@ -3,6 +3,8 @@
 查询分解（2026-09 方案）：候选按 sub_query 标签分组，各自 RRF 后按 chunk_id 合并取最高分；
 精排按子查询分别打分取 max——对比型问题用整句做 query 会把「只讲一方实体」的证据系统性压分。
 """
+import concurrent.futures
+
 from app.agent.state import AgentState
 from app.config import get_settings
 from app.llm.rerank import rerank
@@ -48,9 +50,12 @@ def fuse(state: AgentState) -> dict:
     if fused:
         docs = [f"{c['title']}：{c['text']}" for c in fused]
         best: dict[int, float] = {}
-        for q in queries:
-            for r in rerank(q, docs, top_n=top_n):
-                best[r["index"]] = max(best.get(r["index"], 0.0), r["score"])
+        # 每个子查询一次精排 = 一次独立网络调用，串行会把 2-3 次 rerank 时延直接叠加（实测占
+        # 检索编排的大头）。并发发起、主线程汇总取 max，语义与串行逐次 max 完全一致。
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(queries))) as ex:
+            for rs in ex.map(lambda q: rerank(q, docs, top_n=top_n), queries):
+                for r in rs:
+                    best[r["index"]] = max(best.get(r["index"], 0.0), r["score"])
         evidence = sorted(
             ({**fused[i], "score": sc, "matched_queries": matched.get(fused[i]["chunk_id"], [])}
              for i, sc in best.items()),

@@ -134,7 +134,12 @@ def retrieve(state: AgentState) -> dict:
         return facts
 
     jobs: dict[tuple, concurrent.futures.Future] = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+    # 线程池按任务数开：查询分解后任务数 = 子查询数 × 向量/关键词路数（+ 图谱 1）。仍按 3 个
+    # worker 会把这些任务排成多轮、把本该并行的检索串行化——3 子查询 + 图谱 = 7 个任务排 3 轮，
+    # 实测首 token 时延因此 +36%。上限 8：足够覆盖 3 子查询的最坏情况，又不放大 Neo4j 并发压力。
+    n_jobs = (len(sub_queries) * sum(t in plan for t in ("vector_search", "keyword_search"))
+              + int("graph_search" in plan and bool(graph_entities or template_names)))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(n_jobs, 8))) as ex:
         for i, sq in enumerate(sub_queries):
             # 默认参数绑定循环变量：lambda 直接闭包会在任务真正执行时读到最后一轮的值
             if "vector_search" in plan:
