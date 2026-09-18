@@ -268,7 +268,7 @@ const forgotVisible = ref(false)
     radial-gradient(820px 560px at 88% 82%, rgba(45, 106, 79, 0.48), transparent 62%),
     radial-gradient(640px 440px at 80% 14%, rgba(116, 198, 157, 0.42), transparent 65%),
     radial-gradient(560px 400px at 20% 88%, rgba(188, 108, 37, 0.14), transparent 68%),
-    linear-gradient(150deg, #e8f4ec, v-bind(theme.pageBg) 45%, #dcebe2);
+    linear-gradient(150deg, v-bind(theme.loginGradientFrom), v-bind(theme.pageBg) 45%, v-bind(theme.loginGradientTo));
 }
 
 .login-page::before,
@@ -419,7 +419,7 @@ const forgotVisible = ref(false)
   padding: 48px 44px;
   display: flex;
   flex-direction: column;
-  color: #fff;
+  color: v-bind(theme.sidebarText);
   background: linear-gradient(160deg, rgba(45, 106, 79, 0.85), rgba(26, 50, 32, 0.78));
   -webkit-backdrop-filter: blur(28px) saturate(1.4);
   backdrop-filter: blur(28px) saturate(1.4);
@@ -628,7 +628,9 @@ const forgotVisible = ref(false)
   border-radius: 0;
   background: transparent;
   box-shadow: none !important;
-  border-bottom: 1px solid v-bind(theme.borderColor);
+  /* 下边框不能用 theme.borderColor(#e5e7eb)：它压在浅绿玻璃上对比只有约 1.2:1，
+     实测截图里完全看不出输入区边界在哪，故改用加重后的 fieldBorderGlass。 */
+  border-bottom: 1px solid v-bind(theme.fieldBorderGlass);
   transition: border-color 0.2s;
 }
 
@@ -647,7 +649,8 @@ const forgotVisible = ref(false)
 }
 
 :deep(.el-input__inner::placeholder) {
-  color: v-bind(theme.textColorMuted);
+  /* 占位符是装饰性提示：留在最浅一档，避免与真实输入内容同色而被误读为已填值 */
+  color: v-bind(theme.textColorFaint);
 }
 
 .form-aux {

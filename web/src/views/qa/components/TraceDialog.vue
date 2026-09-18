@@ -7,6 +7,8 @@ import type { StepEvent } from '../../../types/chat'
 defineProps<{
   visible: boolean
   steps: StepEvent[]
+  /** 回答是否仍在流式中：决定流程条最后一步显示「进行中」还是「已完成」 */
+  running?: boolean
 }>()
 
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>()
@@ -19,6 +21,6 @@ const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>()
     width="640px"
     @update:model-value="(v: boolean) => emit('update:visible', v)"
   >
-    <TraceSteps :steps="steps" />
+    <TraceSteps :steps="steps" :running="running" />
   </el-dialog>
 </template>

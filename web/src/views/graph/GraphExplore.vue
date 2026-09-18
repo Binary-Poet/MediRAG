@@ -71,30 +71,46 @@ function renderGraph(nodes: GraphNode[], links: GraphLink[]) {
     })
   }
   chart.setOption({
-    tooltip: {},
+    // 边的关系名默认不铺在画布上（力导向布局下位置不可控，多边必然互压）；
+    // 改为悬停该边时由 tooltip 给出完整三元组 + 就地显示标签，信息不丢且画布干净。
+    tooltip: {
+      trigger: 'item',
+      formatter: (p: any) => (p.dataType === 'edge'
+        ? `${p.data.source} —${p.data.relation}→ ${p.data.target}`
+        : `${p.name}${p.value ?? ''}`),
+    },
     legend: [{ data: TYPES, bottom: 0, textStyle: { fontSize: 11 } }],
     series: [{
       type: 'graph', layout: 'force', roam: true, draggable: true,
       layoutAnimation: true,
       categories: TYPES.map(t => ({ name: t, itemStyle: { color: TYPE_COLOR[t] } })),
-      label: { show: true, fontSize: 10, position: 'right' },
+      label: { show: true, fontSize: 11, position: 'right', color: theme.textColorBody },
       force: { repulsion: 900, edgeLength: [120, 200], gravity: 0.08 },
-      edgeLabel: { show: true, fontSize: 10, formatter: (p: any) => p.data.relation },
+      edgeLabel: {
+        show: false, fontSize: 11, color: theme.textColorBody,
+        backgroundColor: theme.cardBg, padding: [2, 5], borderRadius: 4,
+        formatter: (p: any) => p.data.relation,
+      },
+      emphasis: {
+        focus: 'adjacency',
+        lineStyle: { color: theme.graphEdgeActive, width: 2.4 },
+        edgeLabel: { show: true },
+      },
       data: nodes.map(n => {
         const category = TYPES.indexOf(n.category)
         return {
           id: n.name, name: n.name,
           category: category >= 0 ? category : 0, symbolSize: n.status === '候选' ? 22 : 30,
           itemStyle: n.status === '候选'
-            ? { borderType: 'dashed', borderWidth: 2, borderColor: theme.textColorMuted }
+            ? { borderType: 'dashed', borderWidth: 2, borderColor: theme.textColorFaint }
             : {},
         }
       }),
       links: links.map(l => ({
         source: l.source, target: l.target, relation: l.relation,
-        lineStyle: l.status === '候选' ? { type: 'dashed', color: theme.textColorMuted } : {},
+        lineStyle: l.status === '候选' ? { type: 'dashed', color: theme.textColorFaint } : {},
       })),
-      lineStyle: { color: theme.safetyBg, width: 1.5, curveness: 0.08 },
+      lineStyle: { color: theme.graphEdge, width: 1.6, curveness: 0.08 },
     }],
   })
 }
@@ -129,7 +145,7 @@ onUnmounted(() => {
             <div class="list-head">实体结果 <el-tag size="small" type="info">{{ entities.length }}</el-tag></div>
             <div v-for="e in entities" :key="e.name" class="entity-item"
                  :class="{ active: selected?.name === e.name }" @click="focusEntity(e.name)">
-              <span class="dot" :style="{ background: TYPE_COLOR[e.type] ?? theme.textColorMuted }" />
+              <span class="dot" :style="{ background: TYPE_COLOR[e.type] ?? theme.textColorFaint }" />
               <span class="entity-name">{{ e.name }}</span>
               <el-tag size="small" class="entity-type">{{ e.type }}</el-tag>
             </div>

@@ -296,7 +296,7 @@ function onEnter(e: KeyboardEvent) {
               <span class="thinking-arrow">{{ m.thinkingExpanded ? '▾' : '▸' }}</span>
             </div>
             <div v-if="m.thinkingExpanded" class="thinking-body">
-              <TraceSteps :steps="m.trace" />
+              <TraceSteps :steps="m.trace" :running="loading && i === messages.length - 1" />
             </div>
           </div>
 
@@ -378,7 +378,7 @@ function onEnter(e: KeyboardEvent) {
     </div>
     <p class="disclaimer">本答案仅提供中医药知识科普，不替代辨证、诊断或个体化处方。如有紧急情况请拨打 120。</p>
 
-    <TraceDialog v-model:visible="traceVisible" :steps="currentTrace" />
+    <TraceDialog v-model:visible="traceVisible" :steps="currentTrace" :running="loading" />
     </div>
   </div>
 </template>
@@ -604,19 +604,25 @@ function onEnter(e: KeyboardEvent) {
   }
 }
 
+/* 常规提示（图谱事实说明）：弱底 + 左侧色条。
+   原先满饱和的 #dcfce7 满宽色块是整页最重的色块，把回答正文挤成了次要元素；
+   这段提示命中图谱事实就会出现、频率极高，弱化后才不抢正文。 */
 .safety-box {
   margin-top: 12px;
-  background: v-bind(theme.safetyBg);
+  background: v-bind(theme.safetyBgSoft);
   color: v-bind(theme.safetyText);
+  border-left: 3px solid v-bind(theme.colorSuccess);
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 13px;
   line-height: 1.6;
 }
 
+/* 急症拦截 / 低置信拒答：这两类必须抢注意力，保留满饱和底色 */
 .safety-box.warn {
   background: v-bind(theme.warningBg);
   color: v-bind(theme.warningText);
+  border-left-color: v-bind(theme.colorWarning);
 }
 
 .gf-item {

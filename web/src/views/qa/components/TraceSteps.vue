@@ -5,7 +5,7 @@ import { computed } from 'vue'
 import { theme } from '../../../styles/theme'
 import type { StepEvent } from '../../../types/chat'
 
-const props = defineProps<{ steps: StepEvent[] }>()
+const props = defineProps<{ steps: StepEvent[]; running?: boolean }>()
 
 const steps = [
   { key: 1, icon: '📝', label: '问句理解', desc: '实体识别' },
@@ -56,13 +56,18 @@ function templateLabel(t: string): string {
 </script>
 
 <template>
-  <!-- 5 步流程条：已完成=绿，当前=橙（M-10），待执行=灰 -->
+  <!-- 5 步流程条：已完成=绿，当前=橙（M-10），待执行=灰。
+       「当前」只在流程真正运行时点亮：否则回答生成结束后第 5 步会永久停在
+       「进行中」的橙色上，看起来像还在跑（而橙色在别处又表示自反思告警）。 -->
   <div class="trace-steps">
     <div
       v-for="s in steps"
       :key="s.key"
       class="step"
-      :class="{ active: s.key === activeStep, done: s.key < activeStep }"
+      :class="{
+        active: s.key === activeStep && running,
+        done: s.key < activeStep || (s.key === activeStep && !running),
+      }"
     >
       <div class="step-dot">{{ s.icon }}</div>
       <div class="step-label">{{ s.label }}</div>

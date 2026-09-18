@@ -49,9 +49,9 @@ const menus = [
         :default-active="$route.path"
         router
         class="sidebar-menu"
-        background-color="#1a3220"
-        text-color="#ffffff"
-        active-text-color="#ffffff"
+        :background-color="theme.sidebarBg"
+        :text-color="theme.sidebarText"
+        :active-text-color="theme.sidebarText"
       >
         <el-menu-item v-for="m in menus" :key="m.path" :index="m.path">
           <el-icon><component :is="m.icon" /></el-icon>
@@ -102,7 +102,7 @@ const menus = [
 }
 
 .sidebar {
-  background: #1a3220;
+  background: v-bind(theme.sidebarBg);
   display: flex;
   flex-direction: column;
 }
@@ -118,7 +118,7 @@ const menus = [
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  background: #2d6a4f;
+  background: v-bind(theme.colorPrimary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -126,14 +126,14 @@ const menus = [
 }
 
 .logo-name {
-  color: #fff;
+  color: v-bind(theme.sidebarText);
   font-size: 16px;
   font-weight: 600;
   line-height: 1.2;
 }
 
 .logo-sub {
-  color: rgba(255, 255, 255, 0.6);
+  color: v-bind(theme.sidebarTextMuted);
   font-size: 12px;
 }
 
@@ -143,7 +143,7 @@ const menus = [
 }
 
 .sidebar-menu :deep(.el-menu-item.is-active) {
-  background: #2d6a4f;
+  background: v-bind(theme.sidebarActiveBg);
 }
 
 .sidebar-footer {
@@ -151,12 +151,12 @@ const menus = [
   align-items: center;
   gap: 10px;
   padding: 12px 20px 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid v-bind(theme.sidebarDivider);
   flex-shrink: 0;
 }
 
 .footer-avatar {
-  background: #2d6a4f;
+  background: v-bind(theme.colorPrimary);
   font-size: 13px;
   flex-shrink: 0;
 }
@@ -169,7 +169,7 @@ const menus = [
 }
 
 .footer-name {
-  color: #fff;
+  color: v-bind(theme.sidebarText);
   font-size: 13px;
   line-height: 1.2;
 }
@@ -181,8 +181,8 @@ const menus = [
 }
 
 .topbar {
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  background: v-bind(theme.cardBg);
+  border-bottom: 1px solid v-bind(theme.borderColor);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -196,7 +196,7 @@ const menus = [
 
 .service-tag {
   font-size: 12px;
-  color: #2d6a4f;
+  color: v-bind(theme.colorPrimary);
 }
 
 .user-entry {
@@ -205,7 +205,7 @@ const menus = [
   gap: 6px;
   cursor: pointer;
   font-size: 14px;
-  color: #1f2937;
+  color: v-bind(theme.textColorPrimary);
 }
 
 .user-avatar {
@@ -214,6 +214,6 @@ const menus = [
 }
 
 .content {
-  background: #f5f7f5;
+  background: v-bind(theme.pageBg);
 }
 </style>
