@@ -34,6 +34,9 @@ export const theme = {
   // 空态/警告徽章
   warningBg: '#fef3c7',
   warningText: '#92400e',
+  // 字体族（拉丁字形自托管，见 styles/fonts.css；中文回落系统字体）
+  fontDisplay: "'Source Serif 4', 'Noto Serif SC', 'Songti SC', 'SimSun', Georgia, serif",
+  fontSans: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif",
 } as const
 
 export type Theme = typeof theme
