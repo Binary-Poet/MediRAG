@@ -446,7 +446,7 @@ retrieval_log(id, message_id, vector_n, keyword_n, graph_n, evidence_n, confiden
 |---|---|---|
 | `query_understand.txt` | 一次输出 改写 query / 实体数组 / 意图枚举（强制 JSON） | 结构化输出、Few-shot 给 3 示例 |
 | `query_rewrite_reflect.txt` @@取自B@@ | 证据不足时的二次改写（带失败原因上下文） | 自反思、CoT |
-| `answer_cn_tcm.txt` | 中医药专用回答：只依据给定文献+图谱事实；组成/禁忌先列图谱事实再解释；输出引用编号 | CoT、角色设定、约束防幻觉 |
+| `answer_cn_tcm.txt` | 中医药专用回答：只依据给定文献+图谱事实；**先读懂再自己组织，禁止照抄原文**（文言条文须转述白话，原句引用合计 ≤40 字）；**简洁突出重点**（一般 150–300 字，先结论后要点，不做无关引申与同义重复）；组成/禁忌只依据图谱事实；输出引用编号；纯文本不带 Markdown、不重复免责声明 | CoT、角色设定、约束防幻觉、输出格式约束 |
 | `entity_extract.txt` | 从切片抽取实体关系三元组，输出 JSON 数组 | 结构化输出 |
 | `safety.txt` | 低置信度 / 急症场景固定话术模板 | 安全对齐 |
 | `query_rewrite_history.txt` | 结合多轮历史把指代性问题改写完整 | 多轮对话 |
@@ -517,8 +517,12 @@ src/
 | 方法 | 路径 | 功能 | 对应页面 |
 |---|---|---|---|
 | POST | `/api/auth/login` | 登录，返回 JWT | 登录页 |
+| POST | `/api/auth/register` | 自助注册（固定发放最低权限「知识用户」，成功即返回 token） | 登录页「立即注册」 |
+| PUT | `/api/users/{id}/password` | 管理员重置指定用户密码（仅管理员） | 账户管理「重置密码」/ 登录页「忘记密码」的落地点 |
 | GET | `/api/chat/sessions` / POST `/api/chat/session` | 会话列表 / 新建 | 问答页 |
 | **POST** | `/api/chat/stream` | **SSE 问答主接口（4.3 协议）** | 问答页 + 溯源 |
+| POST | `/api/chat/sessions/{sid}/withdraw` | 撤回一轮问答：**回滚**到该提问之前（该轮及其之后一并删，之前的保留；body `{seq?}`，缺省撤末轮；删空则连会话删） | 回答卡片底部撤回图标 |
+| DELETE | `/api/chat/sessions?favorite=` | 清空当前用户会话（只删自己的，返回删除条数）；`favorite` **必填**（缺参 422，fail closed）：true 只清收藏、false 清全部，与前端筛选页联动 | 会话栏底部「清空会话 / 清空收藏」 |
 | POST | `/api/chat/feedback` | 有用 / 无用反馈 | 回答区 |
 | GET/POST | `/api/documents` | 文档列表 / 上传（multipart） | 知识库 |
 | GET | `/api/documents/{id}/parse-status` | 解析状态轮询 | 知识库 |
