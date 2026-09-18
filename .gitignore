@@ -28,3 +28,6 @@ backend/stage3_graph_results.json
 .vscode/
 .DS_Store
 Thumbs.db
+
+# 设计与改造文档、参考截图（仅本地留存，不入库；如需强制提交用 git add -f docs/...）
+docs/
