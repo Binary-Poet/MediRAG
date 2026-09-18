@@ -170,7 +170,8 @@ onUnmounted(() => {
 .card { background: v-bind(theme.cardBg); border-radius: v-bind(theme.borderRadius); }
 .card.wide { grid-column: span 2; }
 .card-title { font-size: 14px; font-weight: 600; color: v-bind(theme.textColorPrimary); margin-bottom: 10px; }
-.card-title .range { font-size: 12px; font-weight: 400; color: v-bind(theme.textColorMuted); margin-left: 8px; }
+/* 不写死 400：中文子集只发布 500/600，写 400 会让中文落到 500、拉丁落到 400，同串两种粗细 */
+.card-title .range { font-size: 12px; color: v-bind(theme.textColorMuted); margin-left: 8px; }
 .chart { height: 260px; }
 .quality { display: flex; flex-direction: column; gap: 16px; padding-top: 6px; }
 .metric span { display: block; font-size: 13px; color: v-bind(theme.textColorSecondary); margin-bottom: 6px; }

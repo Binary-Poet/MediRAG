@@ -21,14 +21,14 @@
   /* 字体栈实际值由 main.ts 从 theme.ts 注入，此处仅作 JS 未执行时的兜底。
      Element Plus 组件要么用 var(--el-font-family)、要么用 font-family:inherit，覆盖这两处即可全站生效。 */
   --el-font-family: var(--font-display, Georgia, 'Songti SC', 'SimSun', serif);
-  /* 中文子集只发布 400/600 两个字重（见 fonts.css）。Element Plus 默认主字重是 500，
-     会让同一串里拉丁取真 500、中文落到 400 字重，故全站收敛到 600。
+  /* 控件统一 600：正文基准字重已是 500（见 fonts.css），控件靠这 100 的字重差建立层级，
+     否则按钮、选项卡会和正文糊成同一个灰度。
      --el-button/checkbox/radio/link-font-weight 均指向该变量，改此一处即生效。 */
   --el-font-weight-primary: 600;
 }
 
-/* 以下几处在 Element Plus 里是写死的字重，不随 --el-font-weight-primary 变化，需逐个收敛到 600，
-   否则拉丁取真 500/700、中文落到 400/600，同一串内字重不一致。
+/* 以下几处在 Element Plus 里是写死的 500/700，不随 --el-font-weight-primary 变化，
+   逐个对齐到控件的 600，保证同一串里中英字重一致（中文子集只有 500/600 两档）。
    本文件在 element-plus/dist/index.css 之后引入，同特异性下后者胜出。 */
 .el-tabs__item,
 .el-collapse-item__header,
@@ -47,9 +47,13 @@ body,
   padding: 0;
 }
 
-/* 全站字体：Claude 风格衬线族（拉丁 Source Serif 4 / 中文思源宋体），值来自 theme.fontDisplay */
+/* 全站字体：Claude 风格衬线族（拉丁 Source Serif 4 / 中文思源宋体），值来自 theme.fontDisplay。
+   基准字重 500：拉丁是可变字体（200–900，能取到真 500），中文子集发布的是 500/600 两档，
+   两边都落在真 500 上 —— 笔画粗细一致，也不再是 400 那套 14px 下不足 1px 的细横画
+   （成因与生成方式见 fonts.css / scripts/build-cjk-subset.py）。 */
 body {
   font-family: var(--font-display, Georgia, 'Songti SC', 'SimSun', serif);
+  font-weight: 500;
   background: #f5f7f5;
   color: #1f2937;
   font-size: 14px;
