@@ -3,7 +3,7 @@
 // 规格 P0-2 空态 / P0-3 回答态 / P0-4 溯源弹窗
 import { nextTick, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { streamChat } from '../../api/chat'
+import { streamChat, withdrawRound } from '../../api/chat'
 import { authHeaders } from '../../api/http'
 import { theme } from '../../styles/theme'
 import type { GraphFact, Reference, StepEvent } from '../../types/chat'
@@ -22,6 +22,8 @@ interface QA {
   thinkingExpanded: boolean
   thinkingInteracted?: boolean
   feedback?: boolean
+  /** 本轮提问在服务端的 seq：撤回时按它精确定位该轮，缺省（流式中断等）只能撤末轮 */
+  userSeq?: number
 }
 
 const suggestions = [
@@ -38,6 +40,7 @@ const messages = ref<QA[]>([])
 const input = ref('')
 const loading = ref(false)
 const listRef = ref<HTMLElement>()
+const inputRef = ref<{ focus: () => void }>()
 const traceVisible = ref(false)
 const currentTrace = ref<StepEvent[]>([])
 
@@ -49,11 +52,14 @@ function newSession() {
   messages.value = []
   sessionStore.activeId = ''
   currentTrace.value = []
+  input.value = ''            // 输入框是当前会话的草稿：换会话即作废
 }
 
 /** 打开历史会话：把落库 payload 还原成现有 QA 结构，复用同一套卡片渲染 */
 async function openSession(id: string) {
   if (loading.value) return
+  // 输入框里可能是上一轮撤回后回填的提问，切到别的会话就该清空，避免误发到新会话
+  input.value = ''
   try {
     const msgs = await sessionStore.loadMessages(id)
     const built: QA[] = []
@@ -75,6 +81,7 @@ async function openSession(id: string) {
         safety: a?.payload?.safety ?? null,
         trace,
         thinkingExpanded: false,
+        userSeq: m.seq,
       }))
     }
     messages.value = built
@@ -150,6 +157,7 @@ async function send(q?: string) {
         // 认领会话 id：新会话由后端在本轮创建，前端据此激活并刷新列表
         // 可选链：done 事件 data 为空时后端传出 null，直接取 .message_id 会抛 TypeError
         if (data?.message_id) sessionStore.activeId = data.message_id
+        item.userSeq = data?.user_seq   // 本轮 seq，供「撤回」精确定位
         sessionStore.refresh().catch(() => {})   // 列表刷新失败不影响本轮回答
       },
     }, sessionStore.activeId || undefined)
@@ -164,6 +172,45 @@ async function send(q?: string) {
 function openTrace(t: StepEvent[]) {
   currentTrace.value = t
   traceVisible.value = true
+}
+
+/** 撤回图标提示：末轮是「撤回这一轮」，非末轮会把后面的轮次一并回滚 */
+function withdrawTip(i: number): string {
+  return i === messages.value.length - 1
+    ? '撤回本轮提问，放回输入框重新编辑'
+    : '撤回本轮及其之后的全部问答，回到该提问之前的状态'
+}
+
+/** 撤回：回到「该提问还没问」时的对话状态。
+ *
+ * 语义是回滚——该轮及其之后的轮次一起撤掉，之前的轮次保留（只挖掉中间一轮会让
+ * 后续轮次失去它们本就依赖的上下文）；服务端同步删除，否则重开会话会复活、
+ * 且会通过 recent_history 混进后续提问的多轮上下文。撤到没有轮次时连会话一起结束。
+ */
+async function withdraw(i: number) {
+  if (loading.value) return          // 流式进行中不改动，避免 SSE 回调继续写已移除的对象
+  const m = messages.value[i]
+  if (!m) return
+
+  const sid = sessionStore.activeId
+  // userSeq 缺失只可能来自「流式中断、没收到 done」的那一轮，而它必然是末轮；
+  // 非末轮又拿不到 seq 时不动服务端，宁可少删也不删错轮。
+  if (sid && (m.userSeq !== undefined || i === messages.value.length - 1)) {
+    try {
+      const r = await withdrawRound(sid, m.userSeq)
+      if (r.session_deleted) sessionStore.activeId = ''
+      sessionStore.refresh().catch(() => {})   // 列表刷新失败不回滚，问答区已经撤回
+    } catch (e) {
+      ElMessage.error((e as Error).message)
+      return                                  // 服务端失败就不动本地，避免界面与库不一致
+    }
+  }
+
+  input.value = m.question
+  messages.value.splice(i)            // 与后端一致：该轮及其之后一起撤掉
+  if (!messages.value.length) sessionStore.activeId = ''
+  await nextTick()
+  inputRef.value?.focus()
 }
 
 /** 有用/无用反馈：先乐观置位并禁用两按钮，提交失败则回退允许重试（规格 P1 反馈入口）。 */
@@ -193,7 +240,12 @@ function onEnter(e: KeyboardEvent) {
 
 <template>
   <div class="chat-wrap">
-    <SessionList @create="newSession" @select="openSession" @deleted="onDeleted" />
+    <SessionList
+      @create="newSession"
+      @select="openSession"
+      @deleted="onDeleted"
+      @cleared="newSession"
+    />
 
     <div class="chat-page">
     <div v-if="messages.length === 0" class="empty">
@@ -264,23 +316,19 @@ function onEnter(e: KeyboardEvent) {
             注意：以上组成信息严格依据图谱事实，不包含加减变化或现代制剂衍变；实际临床应用须经中医师辨证后使用，不可自行套方。
           </div>
 
-          <!-- 图谱事实区 -->
-          <div v-if="m.graphFacts.length" class="graph-facts">
-            <div class="gf-title">图谱依据：</div>
-            <div v-for="(f, k) in m.graphFacts" :key="k" class="gf-item">
-              【图谱事实{{ k + 1 }}】 {{ f.source }} --{{ f.relation }}--> {{ f.target }}
-            </div>
-            <div class="gf-src">文献来源：内置中医药教学演示数据（需专业审核）</div>
-          </div>
+          <!-- 图谱依据：与「证据来源」同款折叠块，默认折叠。
+               图谱事实在生成结束后才随 references 事件下发，折叠不会遮挡流式过程；
+               不绑 v-model，展开态由 el-collapse 内部维护，回放历史会话同样默认折叠。 -->
+          <el-collapse v-if="m.graphFacts.length" class="fold">
+            <el-collapse-item :title="`图谱依据 (${m.graphFacts.length})`">
+              <div v-for="(f, k) in m.graphFacts" :key="k" class="gf-item">
+                【图谱事实{{ k + 1 }}】 {{ f.source }} --{{ f.relation }}--> {{ f.target }}
+              </div>
+              <div class="gf-src">文献来源：内置中医药教学演示数据（需专业审核）</div>
+            </el-collapse-item>
+          </el-collapse>
 
-          <!-- 检索溯源按钮 -->
-          <div class="trace-entry">
-            <el-button link type="primary" :disabled="!m.trace.length" @click="openTrace(m.trace)">
-              知识检索与图谱溯源
-            </el-button>
-          </div>
-
-          <el-collapse v-if="m.references.length" class="refs">
+          <el-collapse v-if="m.references.length" class="fold">
             <el-collapse-item :title="`证据来源 (${m.references.length})`">
               <div v-for="(r, j) in m.references" :key="r.chunk_id" class="ref-item">
                 <span class="ref-tag graph">文献</span>
@@ -289,13 +337,27 @@ function onEnter(e: KeyboardEvent) {
             </el-collapse-item>
           </el-collapse>
 
-          <!-- 有用/无用反馈（规格 P1 入口） -->
-          <div v-if="m.answer" class="feedback">
-            <span class="fb-label">此回答有帮助吗？</span>
-            <el-button link size="small" :type="m.feedback === true ? 'primary' : ''"
-                       :disabled="m.feedback !== undefined" @click="sendFeedback(m, true)">有用</el-button>
-            <el-button link size="small" :type="m.feedback === false ? 'danger' : ''"
-                       :disabled="m.feedback !== undefined" @click="sendFeedback(m, false)">无用</el-button>
+          <!-- 检索溯源按钮：置于两个折叠块之下，避免夹在「图谱依据」与「证据来源」中间 -->
+          <div class="trace-entry">
+            <el-button link type="primary" :disabled="!m.trace.length" @click="openTrace(m.trace)">
+              知识检索与图谱溯源
+            </el-button>
+          </div>
+
+          <!-- 卡片底部操作行：左「反馈」、右「撤回本轮」（规格 P1 反馈入口 + 撤回） -->
+          <div v-if="!isThinking(i, m)" class="answer-actions">
+            <div v-if="m.answer" class="feedback">
+              <span class="fb-label">此回答有帮助吗？</span>
+              <el-button link size="small" :type="m.feedback === true ? 'primary' : ''"
+                         :disabled="m.feedback !== undefined" @click="sendFeedback(m, true)">有用</el-button>
+              <el-button link size="small" :type="m.feedback === false ? 'danger' : ''"
+                         :disabled="m.feedback !== undefined" @click="sendFeedback(m, false)">无用</el-button>
+            </div>
+            <el-tooltip :content="withdrawTip(i)" placement="top">
+              <el-button class="withdraw" link :disabled="loading" @click="withdraw(i)">
+                <el-icon><RefreshLeft /></el-icon>
+              </el-button>
+            </el-tooltip>
           </div>
         </el-card>
       </div>
@@ -303,6 +365,7 @@ function onEnter(e: KeyboardEvent) {
 
     <div class="input-bar">
       <el-input
+        ref="inputRef"
         v-model="input"
         type="textarea"
         :autosize="{ minRows: 1, maxRows: 4 }"
@@ -361,6 +424,7 @@ function onEnter(e: KeyboardEvent) {
 .empty-title {
   margin: 8px 0 6px;
   font-size: 22px;
+  font-weight: 600;
   color: v-bind(theme.textColorPrimary);
 }
 
@@ -555,23 +619,15 @@ function onEnter(e: KeyboardEvent) {
   color: v-bind(theme.warningText);
 }
 
-.graph-facts {
-  margin-top: 12px;
+.gf-item {
+  padding: 2px 0;
   font-size: 13px;
   color: v-bind(theme.textColorBody);
 }
 
-.gf-title {
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.gf-item {
-  padding: 2px 0;
-}
-
 .gf-src {
   margin-top: 4px;
+  font-size: 13px;
   color: v-bind(theme.textColorMuted);
 }
 
@@ -579,9 +635,33 @@ function onEnter(e: KeyboardEvent) {
   margin-top: 10px;
 }
 
-.refs {
+/* 「图谱依据」「证据来源」共用的折叠块外观（默认折叠态由 el-collapse 负责） */
+.fold {
   margin-top: 12px;
   border-top: 1px dashed v-bind(theme.borderColor);
+}
+
+/* 卡片底部操作行：反馈靠左、撤回图标靠右 */
+.answer-actions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.answer-actions .feedback {
+  margin-top: 0;
+  margin-right: auto;
+}
+
+.withdraw {
+  color: v-bind(theme.textColorMuted);
+  font-size: 15px;
+  padding: 4px;
+}
+
+.withdraw:hover:not(.is-disabled) {
+  color: v-bind(theme.colorPrimary);
 }
 
 .feedback {

@@ -75,8 +75,11 @@ export interface SessionListResponse {
   favorite_total: number
 }
 
-/** done 事件载荷：message_id 即会话 id，前端据此认领本轮新建的会话 */
+/** done 事件载荷：message_id 即会话 id，前端据此认领本轮新建的会话；
+    user_seq 为本轮提问的 seq，撤回时用它精确删掉指定轮 */
 export interface DonePayload {
   message_id?: string
   metrics?: Record<string, number>
+  user_seq?: number
+  assistant_seq?: number
 }

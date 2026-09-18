@@ -2,7 +2,8 @@
 // 提问完成后要刷新列表项的标题/时间/条数）。父子传参会形成环形依赖，故用 store。
 import { defineStore } from 'pinia'
 import {
-  deleteSession as apiDelete, fetchSessionMessages, listSessions, setSessionFavorite,
+  clearSessions as apiClear, deleteSession as apiDelete, fetchSessionMessages,
+  listSessions, setSessionFavorite,
 } from '../api/chat'
 import type { SessionSummary, StoredMessage } from '../types/chat'
 
@@ -35,6 +36,12 @@ export const useSessionStore = defineStore('session', {
     /** 删除；不清 activeId——由调用方（Chat.vue）决定问答区是否复位 */
     async remove(id: string) {
       await apiDelete(id)
+      await this.refresh()
+    },
+    /** 按当前筛选清空会话（「全部」页清全部、「已收藏」页只清收藏）；
+        同样不清 activeId——问答区复位由调用方决定 */
+    async clearAll() {
+      await apiClear(this.favoriteOnly)
       await this.refresh()
     },
     loadMessages(id: string): Promise<StoredMessage[]> {

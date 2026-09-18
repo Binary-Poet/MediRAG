@@ -8,7 +8,9 @@ import { relativeTime } from '../../../utils/time'
 import { theme } from '../../../styles/theme'
 import type { SessionSummary } from '../../../types/chat'
 
-const emit = defineEmits<{ create: []; select: [id: string]; deleted: [id: string] }>()
+const emit = defineEmits<{
+  create: []; select: [id: string]; deleted: [id: string]; cleared: []
+}>()
 const store = useSessionStore()
 
 const tabs = computed(() => [
@@ -44,6 +46,43 @@ async function remove(s: SessionSummary) {
   try {
     await store.remove(s.session_id)
     emit('deleted', s.session_id)
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
+/** 清空按钮文案随筛选页变化：停在「已收藏」时清的是收藏，不能让文案说着"会话"却删了收藏 */
+const clearLabel = computed(() => (store.favoriteOnly ? '清空收藏' : '清空会话'))
+/** 本次会被清掉的条数：与筛选页口径一致（收藏页用收藏数，避免弹窗数字与屏上列表对不上） */
+const clearCount = computed(() => (store.favoriteOnly ? store.favoriteTotal : store.total))
+
+/** 确认语把「删什么、留什么」都写明。
+    只靠筛选页的位置/颜色区分删除范围太脆弱——看错一眼的代价是不可恢复的数据丢失。 */
+const clearConfirmText = computed(() => {
+  if (store.favoriteOnly) {
+    const keep = store.total - store.favoriteTotal
+    return `确定清空 ${store.favoriteTotal} 个收藏的会话？未收藏的 ${keep} 个会话会保留。`
+      + '该操作不可恢复。'
+  }
+  return `确定清空全部 ${store.total} 个会话（其中 ${store.favoriteTotal} 个已收藏）？`
+    + '该操作不可恢复。'
+})
+
+/** 清空当前筛选页的会话：一次删一批、不可恢复，沿用单项删除那套二次确认交互 */
+async function clearAll() {
+  try {
+    await ElMessageBox.confirm(clearConfirmText.value, '清空确认',
+      { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' },
+    )
+  } catch {
+    return // 用户取消
+  }
+  // 收藏页清空时，当前打开的会话可能没被收藏、不在删除范围内，此时不能复位问答区
+  const activeCleared = !store.favoriteOnly
+    || store.sessions.some((s) => s.session_id === store.activeId)
+  try {
+    await store.clearAll()
+    if (activeCleared) emit('cleared')
   } catch (e) {
     ElMessage.error((e as Error).message)
   }
@@ -119,6 +158,21 @@ onMounted(() => {
       <div v-if="!store.sessions.length" class="sl-empty">
         {{ store.favoriteOnly ? '暂无收藏的会话' : '暂无历史会话' }}
       </div>
+    </div>
+
+    <!-- 底部破坏性操作：与顶部「+ 新对话」拉开距离，降低误点概率；
+         作用范围跟随当前筛选页（全部页清全部 / 已收藏页只清收藏） -->
+    <div class="sl-foot">
+      <el-button
+        class="sl-clear"
+        link
+        type="danger"
+        size="small"
+        :disabled="clearCount === 0"
+        @click="clearAll"
+      >
+        {{ clearLabel }}
+      </el-button>
     </div>
   </aside>
 </template>
@@ -295,5 +349,16 @@ onMounted(() => {
   text-align: center;
   font-size: 13px;
   color: v-bind(theme.textColorMuted);
+}
+
+.sl-foot {
+  flex: none;
+  padding: 8px 10px 10px;
+  border-top: 1px solid v-bind(theme.borderColor);
+  text-align: center;
+}
+
+.sl-clear {
+  font-size: 13px;
 }
 </style>

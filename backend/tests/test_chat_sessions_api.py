@@ -87,6 +87,58 @@ def test_favorite_toggle_then_filter(client, admin):
     assert client.get("/api/chat/sessions?favorite=true", headers=admin).json()["sessions"] == []
 
 
+def test_clear_sessions_requires_auth_and_clears_only_own(client, admin, other):
+    """清空会话：未鉴权 401；只清自己的，不能连带清掉他人会话。"""
+    _seed()                                        # admin（user_id=1）的会话
+    b = cs.create_session(2, "user1 的会话")
+    cs.append_message(b, "user", "user1 的会话")
+
+    assert client.delete("/api/chat/sessions?favorite=false").status_code == 401
+
+    r = client.delete("/api/chat/sessions?favorite=false", headers=admin)
+    assert r.status_code == 200
+    assert r.json() == {"deleted": 1}
+    assert client.get("/api/chat/sessions", headers=admin).json()["total"] == 0
+    # 越权安全：一键全删比单条删除危险得多，必须确认他人数据完好
+    assert client.get("/api/chat/sessions", headers=other).json()["total"] == 1
+    assert client.get(f"/api/chat/sessions/{b}/messages", headers=other).status_code == 200
+
+
+def test_clear_sessions_without_favorite_param_is_rejected(client, admin):
+    """缺 favorite 参数一律 422（fail closed）。
+
+    这是线上踩过的坑：旧版前端调用不带参数，服务端把「已收藏」页的清空当成全量清空，
+    未收藏的会话被一起删掉且调用方毫无察觉。宁可报错也不误删。
+    """
+    _seed()
+    assert client.delete("/api/chat/sessions", headers=admin).status_code == 422
+    # 报错不改数据
+    assert client.get("/api/chat/sessions", headers=admin).json()["total"] == 1
+
+
+def test_clear_sessions_favorite_filter(client, admin):
+    """favorite=true 只清收藏（前端「已收藏」页的清空），未收藏的会话保留。"""
+    a = _seed()                                   # admin 的会话，未收藏
+    fav = cs.create_session(1, "收藏的会话")
+    cs.append_message(fav, "user", "收藏的会话")
+    cs.set_favorite(fav, 1, True)
+
+    r = client.delete("/api/chat/sessions?favorite=true", headers=admin)
+    assert r.status_code == 200 and r.json() == {"deleted": 1}
+
+    left = client.get("/api/chat/sessions", headers=admin).json()
+    assert left["total"] == 1
+    assert left["favorite_total"] == 0
+    assert left["sessions"][0]["session_id"] == a
+    assert client.get(f"/api/chat/sessions/{fav}/messages", headers=admin).status_code == 404
+
+
+def test_clear_sessions_when_empty_is_idempotent(client, admin):
+    url = "/api/chat/sessions?favorite=false"
+    assert client.delete(url, headers=admin).json() == {"deleted": 0}
+    assert client.delete(url, headers=admin).json() == {"deleted": 0}
+
+
 def test_delete_then_404(client, admin):
     a = _seed()
     assert client.delete(f"/api/chat/sessions/{a}", headers=admin).status_code == 200
@@ -116,3 +168,35 @@ def test_cross_user_access_all_404(client, admin, other):
     assert client.get("/api/chat/sessions", headers=other).json()["total"] == 0
     # 未被越权操作影响
     assert client.get(f"/api/chat/sessions/{a}/messages", headers=admin).status_code == 200
+
+
+def test_withdraw_last_round_then_session_deleted(client, admin, other):
+    """撤回唯一一轮：问答双删、会话一并删除，越权/未鉴权不放行。"""
+    a = _seed()
+    assert client.post(f"/api/chat/sessions/{a}/withdraw").status_code == 401
+    assert client.post(f"/api/chat/sessions/{a}/withdraw", headers=other).status_code == 404
+
+    r = client.post(f"/api/chat/sessions/{a}/withdraw", json={}, headers=admin)
+    assert r.status_code == 200
+    assert r.json() == {"deleted": 2, "session_deleted": True}
+    assert client.get("/api/chat/sessions", headers=admin).json()["total"] == 0
+    assert client.get(f"/api/chat/sessions/{a}/messages", headers=admin).status_code == 404
+
+
+def test_withdraw_specific_round_keeps_session(client, admin):
+    a = cs.create_session(1, "第一问")
+    cs.append_message(a, "user", "第一问")
+    cs.append_message(a, "assistant", "答一")
+    second = cs.append_message(a, "user", "第二问")
+    cs.append_message(a, "assistant", "答二")
+
+    r = client.post(f"/api/chat/sessions/{a}/withdraw", json={"seq": second}, headers=admin)
+    assert r.status_code == 200
+    assert r.json() == {"deleted": 2, "session_deleted": False}
+    msgs = client.get(f"/api/chat/sessions/{a}/messages", headers=admin).json()["messages"]
+    assert [m["content"] for m in msgs] == ["第一问", "答一"]
+    # 不存在的轮次 → 404，且不误删
+    assert client.post(f"/api/chat/sessions/{a}/withdraw", json={"seq": second},
+                       headers=admin).status_code == 404
+    assert len(client.get(f"/api/chat/sessions/{a}/messages",
+                          headers=admin).json()["messages"]) == 2

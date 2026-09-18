@@ -24,6 +24,11 @@ class StreamBody(BaseModel):
     session_id: str | None = Field(default=None, max_length=64)
 
 
+class WithdrawBody(BaseModel):
+    """撤回哪一轮：seq 为该轮 user 消息的 seq；缺省撤回最后一轮。"""
+    seq: int | None = Field(default=None, ge=1)
+
+
 def sse(event: str, data: dict | str) -> str:
     payload = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
     return f"event: {event}\ndata: {payload}\n\n"
@@ -73,7 +78,8 @@ def chat_stream(body: StreamBody, user: User = Depends(current_user)) -> Streami
     session_id = body.session_id or chat_session.create_session(user.id, body.question)
     # 顺序不可颠倒：先取历史再写当前提问，否则当前问题会重复进入 chat_history
     history = get_history(session_id)
-    chat_session.append_message(session_id, "user", body.question)
+    # 记下本轮提问的 seq：done 事件回传给前端，供「撤回」精确删除指定轮
+    user_seq = chat_session.append_message(session_id, "user", body.question)
     graph = get_agent()
     initial = _initial_state(body, session_id, history)
 
@@ -137,7 +143,7 @@ def chat_stream(body: StreamBody, user: User = Depends(current_user)) -> Streami
         yield sse("references", {"docs": refs, "graph_facts": final["graph_facts"]})
 
         # 先落库再发 done：前端收到 done 即刷新会话列表，反序会读到未写完的条数
-        chat_session.append_message(session_id, "assistant", answer_text, payload={
+        assistant_seq = chat_session.append_message(session_id, "assistant", answer_text, payload={
             "trace": final.get("trace", []),
             "references": refs,
             "graph_facts": final.get("graph_facts", []),
@@ -152,7 +158,7 @@ def chat_stream(body: StreamBody, user: User = Depends(current_user)) -> Streami
             "graph_n": len(final.get("graph_facts", [])),
             "evidence_n": len(final["evidence"]),
             "reflect_count": final.get("reflect_count", 0),
-        }})
+        }, "user_seq": user_seq, "assistant_seq": assistant_seq})
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 
@@ -174,11 +180,39 @@ def patch_session(sid: str, body: FavoriteBody, u: User = Depends(current_user))
     return {"session_id": sid, "favorite": body.favorite}
 
 
+@router.delete("/chat/sessions")
+def clear_sessions(favorite: bool, u: User = Depends(current_user)) -> dict:
+    """清空会话（侧栏「清空会话 / 清空收藏」）。
+
+    favorite=true 只清收藏，false 清全部——与前端筛选页联动。
+    **必填是有意为之**：省略参数若回落成"清全部"，那么任何旧版前端（或不带参数的脚本）在
+    「已收藏」页点清空都会把未收藏的会话一并删掉，而调用方对此毫无察觉。缺参直接 422
+    （fail closed），宁可报错也不误删。
+    另外只删自己的：跨用户越权在这里是一键全删，比单条删除危险得多，故服务层只按 user_id 过滤。
+    """
+    return {"deleted": chat_session.delete_all_sessions(u.id, favorite_only=favorite)}
+
+
 @router.delete("/chat/sessions/{sid}")
 def remove_session(sid: str, u: User = Depends(current_user)) -> dict:
     if not chat_session.delete_session(sid, u.id):
         raise HTTPException(status_code=404, detail="会话不存在")
     return {"ok": True}
+
+
+@router.post("/chat/sessions/{sid}/withdraw")
+def withdraw_round(sid: str, body: WithdrawBody | None = None,
+                   u: User = Depends(current_user)) -> dict:
+    """撤回一轮问答（前端回答卡片底部的撤回图标）：回到该提问「还没问」时的对话状态。
+
+    回滚语义：该轮及其之后的轮次一并删除，之前的轮次保留。会话剩空（撤的是首轮）时
+    连同会话一起删除，响应 session_deleted=true，前端据此解绑当前会话并刷新列表。
+    会话/该轮不存在返回 404。
+    """
+    r = chat_session.withdraw_round(sid, u.id, body.seq if body else None)
+    if r is None:
+        raise HTTPException(status_code=404, detail="会话或该轮问答不存在")
+    return r
 
 
 @router.get("/chat/sessions/{sid}/messages")

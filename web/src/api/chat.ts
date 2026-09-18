@@ -83,6 +83,15 @@ export async function setSessionFavorite(sessionId: string, favorite: boolean): 
   if (!resp.ok) throw new Error(await detail(resp))
 }
 
+/** 清空会话，返回删除条数（服务端只删自己的）；
+    favoriteOnly=true 时只清收藏——与「已收藏」筛选页联动 */
+export async function clearSessions(favoriteOnly = false): Promise<{ deleted: number }> {
+  const resp = await fetch(`/api/chat/sessions?favorite=${favoriteOnly}`,
+                           { method: 'DELETE', headers: authHeaders() })
+  if (!resp.ok) throw new Error(await detail(resp))
+  return resp.json()
+}
+
 export async function deleteSession(sessionId: string): Promise<void> {
   const resp = await fetch(`/api/chat/sessions/${sessionId}`, {
     method: 'DELETE', headers: authHeaders(),
@@ -94,4 +103,18 @@ export async function fetchSessionMessages(sessionId: string): Promise<StoredMes
   const resp = await fetch(`/api/chat/sessions/${sessionId}/messages`, { headers: authHeaders() })
   if (!resp.ok) throw new Error(await detail(resp))
   return (await resp.json()).messages
+}
+
+/** 撤回一轮问答：seq 为该轮提问的 seq，缺省撤回最后一轮。会话只剩这一轮时会被一并删除。 */
+export async function withdrawRound(
+  sessionId: string,
+  seq?: number,
+): Promise<{ deleted: number; session_deleted: boolean }> {
+  const resp = await fetch(`/api/chat/sessions/${sessionId}/withdraw`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ seq: seq ?? null }),
+  })
+  if (!resp.ok) throw new Error(await detail(resp))
+  return resp.json()
 }
