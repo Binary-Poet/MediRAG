@@ -18,6 +18,25 @@
   --el-border-color-light: #e5e7eb;
   --el-fill-color-light: #f5f7f5;
   --el-bg-color-page: #f5f7f5;
+  /* 字体栈实际值由 main.ts 从 theme.ts 注入，此处仅作 JS 未执行时的兜底。
+     Element Plus 组件要么用 var(--el-font-family)、要么用 font-family:inherit，覆盖这两处即可全站生效。 */
+  --el-font-family: var(--font-display, Georgia, 'Songti SC', 'SimSun', serif);
+  /* 中文子集只发布 400/600 两个字重（见 fonts.css）。Element Plus 默认主字重是 500，
+     会让同一串里拉丁取真 500、中文落到 400 字重，故全站收敛到 600。
+     --el-button/checkbox/radio/link-font-weight 均指向该变量，改此一处即生效。 */
+  --el-font-weight-primary: 600;
+}
+
+/* 以下几处在 Element Plus 里是写死的字重，不随 --el-font-weight-primary 变化，需逐个收敛到 600，
+   否则拉丁取真 500/700、中文落到 400/600，同一串内字重不一致。
+   本文件在 element-plus/dist/index.css 之后引入，同特异性下后者胜出。 */
+.el-tabs__item,
+.el-collapse-item__header,
+.el-breadcrumb__separator,
+.el-select-dropdown__item.is-selected,
+.el-descriptions__title,
+.el-descriptions__label.el-descriptions__cell.is-bordered-label {
+  font-weight: 600;
 }
 
 html,
@@ -28,10 +47,19 @@ body,
   padding: 0;
 }
 
+/* 全站字体：Claude 风格衬线族（拉丁 Source Serif 4 / 中文思源宋体），值来自 theme.fontDisplay */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Microsoft YaHei', sans-serif;
+  font-family: var(--font-display, Georgia, 'Songti SC', 'SimSun', serif);
   background: #f5f7f5;
   color: #1f2937;
   font-size: 14px;
+}
+
+/* 表单控件默认不继承 body 字体，显式拉回 */
+button,
+input,
+select,
+textarea,
+optgroup {
+  font-family: inherit;
 }

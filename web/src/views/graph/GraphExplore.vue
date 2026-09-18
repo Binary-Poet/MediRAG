@@ -4,7 +4,7 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { init, type ECharts } from 'echarts/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { theme } from '../../styles/theme'
-import { regGraph } from '../../utils/echarts'
+import { ECHARTS_THEME, regGraph } from '../../utils/echarts'
 import type { GraphEntity, GraphLink, GraphNode } from '../../types/graph'
 import { getEntityDetail, getNeighbors, reimportGraph, searchEntities } from '../../api/graph'
 import CandidateReview from './CandidateReview.vue'
@@ -63,7 +63,7 @@ async function focusEntity(name: string) {
 function renderGraph(nodes: GraphNode[], links: GraphLink[]) {
   if (!chartRef.value) return
   if (!chart) {
-    chart = init(chartRef.value)
+    chart = init(chartRef.value, ECHARTS_THEME)
     chartReady.value = true
     // 点节点联动左列表与右详情（规格 P0-5 交互验收①）；只注册一次，避免重复叠加
     chart.on('click', (p) => {
@@ -183,6 +183,7 @@ onUnmounted(() => {
 .canvas-empty { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; pointer-events: none; }
 .chart { width: 100%; height: 640px; }
 .detail-head { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+.detail-head strong { font-weight: 600; }
 .detail-field { margin-bottom: 10px; font-size: 13px; }
 .detail-field label { display: block; color: v-bind(theme.textColorSecondary); font-size: 12px; margin-bottom: 2px; }
 .legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: v-bind(theme.textColorSecondary); margin-top: 16px; }

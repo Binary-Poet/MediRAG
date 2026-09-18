@@ -4,8 +4,11 @@
  *   DM Sans         ≈ Styrene B（Claude 的几何无衬线正文体，商业字体，不可打包）
  *   Noto Serif SC   ≈ 思源宋体，中文衬线（Copernicus 无 CJK 字形，中文须单独配衬线体）
  * 三者均为 SIL OFL 许可，允许自托管与再分发。
- * 拉丁字形按整族引入；中文只内置前端界面实际用到的字符（pyftsubset 子集化），
- * 未收录的汉字会回落到系统衬线体（Songti SC / SimSun），不会出现方框。
+ * 拉丁字形按整族引入；中文按 pyftsubset 子集化，字符集覆盖「界面文案 + 语料/图谱/评测数据 +
+ * 后端中文文案 + 文档术语 + jieba 高频汉字缓冲」共 3101 字，两个字重使用完全相同的字符集
+ * —— 字符集不一致时，页面会出现"同一句话两种字体"的拼接（字重缺字与覆盖缺字都会导致）。
+ * 未收录的生僻字仍会回落系统衬线体（Songti SC / SimSun），不会出现方框。
+ * 数据/文案更新后重新生成：cd web && python scripts/build-cjk-subset.py（脚本内置覆盖自检）。
  * 字体栈定义在 src/styles/theme.ts，组件内勿另起字体名。
  */
 
@@ -36,7 +39,7 @@
 }
 
 /* 中文衬线：unicode-range 限定 CJK 区间，纯拉丁文本不会触发中文子集的下载。
-   400 覆盖全部界面用字；600 只含标题用字，避免大字号的合成加粗。 */
+   400 正文 / 600 标题用字重，两者字符集一致（见上方说明）。 */
 @font-face {
   font-family: 'Noto Serif SC';
   src: url('/fonts/NotoSerifSC-Subset-400.woff2') format('woff2');

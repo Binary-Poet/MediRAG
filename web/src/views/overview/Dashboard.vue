@@ -3,7 +3,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { getInstanceByDom, init, type ECharts, type EChartsCoreOption } from 'echarts/core'
 import { ElMessage } from 'element-plus'
-import { regBase } from '../../utils/echarts'
+import { ECHARTS_THEME, regBase } from '../../utils/echarts'
 import { getOverview } from '../../api/stats'
 import type { NamedValue, OverviewData, QualityStats, TrendPoint } from '../../types/stats'
 import { theme } from '../../styles/theme'
@@ -81,7 +81,7 @@ function draw(el: HTMLElement | undefined, option: EChartsCoreOption) {
   if (!el) return
   let chart = getInstanceByDom(el)
   if (!chart) {
-    chart = init(el)
+    chart = init(el, ECHARTS_THEME)
     charts.push(chart)
   }
   chart.setOption(option)
