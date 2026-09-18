@@ -55,6 +55,57 @@ async function handleLogin() {
     loading.value = false
   }
 }
+
+// ===== 自助注册 =====
+const registerVisible = ref(false)
+const registering = ref(false)
+const registerError = ref('')
+const registerForm = reactive({ username: '', display_name: '', password: '', confirm: '' })
+
+function openRegister() {
+  Object.assign(registerForm, { username: '', display_name: '', password: '', confirm: '' })
+  registerError.value = ''
+  registerVisible.value = true
+}
+
+/** 前端先挡明显错误（少一次往返）；后端仍会独立校验一次，前端校验不可信。 */
+function submitRegister() {
+  const username = registerForm.username.trim()
+  if (username.length < 3 || username.length > 20) {
+    registerError.value = '用户名需 3–20 个字符'
+    return
+  }
+  if (registerForm.password.length < 6) {
+    registerError.value = '密码至少 6 位'
+    return
+  }
+  if (registerForm.password !== registerForm.confirm) {
+    registerError.value = '两次输入的密码不一致'
+    return
+  }
+  registerError.value = ''
+  void doRegister(username)
+}
+
+async function doRegister(username: string) {
+  registering.value = true
+  try {
+    // 后端注册成功即返回 token，前端直接进主页，不再走一次登录
+    await auth.register(username, registerForm.password, registerForm.display_name.trim())
+    registerVisible.value = false
+    ElMessage.success('注册成功，已自动登录')
+    router.push('/')
+  } catch (e) {
+    registerError.value = (e as Error).message
+  } finally {
+    registering.value = false
+  }
+}
+
+// ===== 忘记密码 =====
+// 系统未接入邮件/短信，没有安全的自助找回路径，故只给出口径明确的说明弹窗；
+// 落地点是管理员在「账户管理」里重置密码（/api/users/{id}/password）。
+const forgotVisible = ref(false)
 </script>
 
 <template>
@@ -121,12 +172,15 @@ async function handleLogin() {
 
         <div class="form-aux">
           <el-checkbox v-model="form.remember">记住我</el-checkbox>
-          <el-link type="primary" :underline="false">忘记密码？</el-link>
+          <el-link type="primary" :underline="false" @click="forgotVisible = true">忘记密码？</el-link>
         </div>
 
         <el-button type="primary" class="login-btn" :loading="loading" @click="handleLogin">立即登录</el-button>
 
-        <div class="register-tip">还没有账号？ <el-link type="primary" :underline="false">立即注册</el-link></div>
+        <div class="register-tip">
+          还没有账号？
+          <el-link type="primary" :underline="false" @click="openRegister">立即注册</el-link>
+        </div>
 
         <div class="demo-area">
           <div class="demo-head"><span>演示账号（点按自动填充）</span></div>
@@ -143,6 +197,56 @@ async function handleLogin() {
         </div>
       </section>
     </div>
+
+    <!-- 自助注册：注册成功即自动登录（后端直接返回 token） -->
+    <el-dialog
+      v-model="registerVisible"
+      title="注册账号"
+      width="440px"
+      class="auth-dialog"
+      :close-on-click-modal="false"
+    >
+      <p class="dialog-hint">
+        注册后获得「知识用户」角色，可使用辨证问答与图谱检索；如需更高权限请联系管理员。
+      </p>
+      <div class="field">
+        <label class="field-label">用户名</label>
+        <el-input v-model="registerForm.username" placeholder="3–20 个字符" @input="registerError = ''" />
+      </div>
+      <div class="field">
+        <label class="field-label">姓名（选填）</label>
+        <el-input v-model="registerForm.display_name" placeholder="不填则使用用户名" />
+      </div>
+      <div class="field">
+        <label class="field-label">密码</label>
+        <el-input v-model="registerForm.password" type="password" show-password
+                  placeholder="至少 6 位" @input="registerError = ''" />
+      </div>
+      <div class="field">
+        <label class="field-label">确认密码</label>
+        <el-input v-model="registerForm.confirm" type="password" show-password
+                  placeholder="再次输入密码" @input="registerError = ''"
+                  @keyup.enter="submitRegister" />
+      </div>
+      <div v-if="registerError" class="field-error">{{ registerError }}</div>
+      <template #footer>
+        <el-button @click="registerVisible = false">取消</el-button>
+        <el-button type="primary" :loading="registering" @click="submitRegister">注册并登录</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 忘记密码：无邮件/短信通道，不做假的自助流程，只说明唯一可行路径 -->
+    <el-dialog v-model="forgotVisible" title="忘记密码" width="440px" class="auth-dialog">
+      <p class="dialog-hint">
+        本系统未接入邮件或短信服务，<strong>暂不支持自助找回密码</strong>。
+      </p>
+      <p class="dialog-hint">
+        请联系系统管理员，在「账户管理」中为你重置密码；管理员账号见登录页下方的演示账号区。
+      </p>
+      <template #footer>
+        <el-button type="primary" @click="forgotVisible = false">我知道了</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -461,7 +565,7 @@ async function handleLogin() {
   margin: 10px 0 14px;
   font-family: v-bind(theme.fontDisplay);
   font-size: 26px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0;
   color: v-bind(theme.textColorPrimary);
 }
@@ -476,6 +580,19 @@ async function handleLogin() {
 
 .field {
   margin-bottom: 16px;
+}
+
+/* 弹窗正文说明（注册/忘记密码）：弹窗内容被 teleport 到 body，
+   字体走全局 --el-font-family（已在 element-overrides.css 设为衬线族） */
+.dialog-hint {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: v-bind(theme.textColorSecondary);
+}
+
+.dialog-hint:last-child {
+  margin-bottom: 0;
 }
 
 .field-label {

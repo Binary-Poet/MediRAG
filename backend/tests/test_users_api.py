@@ -67,3 +67,29 @@ def test_admin_cannot_delete_self(client):
     # admin 仍在（未被删掉）
     names = {u["username"] for u in client.get("/api/users", headers=h).json()["items"]}
     assert "admin" in names
+
+
+def test_admin_reset_password(client):
+    """管理员重置密码（登录页「忘记密码」的落地点）：新密码可登录、旧密码失效。"""
+    h = _auth(client)
+    uid = next(u["id"] for u in client.get("/api/users", headers=h).json()["items"]
+               if u["username"] == "user1")
+    r = client.put(f"/api/users/{uid}/password", headers=h, json={"new_password": "reset123"})
+    assert r.status_code == 200 and r.json() == {"id": uid, "ok": True}
+    assert client.post("/api/auth/login",
+                       json={"username": "user1", "password": "reset123"}).status_code == 200
+    assert client.post("/api/auth/login",
+                       json={"username": "user1", "password": "admin123"}).status_code == 401
+
+
+def test_reset_password_guards(client):
+    """越权与非法输入：未登录 401、非管理员 403、密码过短 422、用户不存在 404。"""
+    assert client.put("/api/users/2/password",
+                      json={"new_password": "reset123"}).status_code == 401
+    assert client.put("/api/users/2/password", headers=_auth(client, "user1"),
+                      json={"new_password": "reset123"}).status_code == 403
+    admin = _auth(client)
+    assert client.put("/api/users/2/password", headers=admin,
+                      json={"new_password": "123"}).status_code == 422
+    assert client.put("/api/users/9999/password", headers=admin,
+                      json={"new_password": "reset123"}).status_code == 404

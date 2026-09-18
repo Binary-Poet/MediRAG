@@ -2,7 +2,9 @@
 // 账户管理（P2）：列表 / 新建 / 删除。后端 /api/users 仅管理员可访问（require_admin）。
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { createUser, deleteUser, listUsers, type CreateUserBody } from '../../api/users'
+import {
+  createUser, deleteUser, listUsers, resetUserPassword, type CreateUserBody,
+} from '../../api/users'
 import type { UserInfo } from '../../api/auth'
 import { useAuthStore } from '../../stores/auth'
 import { theme } from '../../styles/theme'
@@ -60,6 +62,37 @@ async function submitCreate() {
   }
 }
 
+// 重置密码：登录页「忘记密码」的落地点（系统无邮件通道，只能管理员代为重置）
+const resetVisible = ref(false)
+const resetting = ref(false)
+const resetTarget = ref<UserInfo | null>(null)
+const resetPassword = ref('')
+
+function openReset(row: UserInfo) {
+  resetTarget.value = row
+  resetPassword.value = ''
+  resetVisible.value = true
+}
+
+async function submitReset() {
+  const row = resetTarget.value
+  if (!row) return
+  if (resetPassword.value.length < 6) {
+    ElMessage.warning('密码至少 6 位')
+    return
+  }
+  resetting.value = true
+  try {
+    await resetUserPassword(row.id, resetPassword.value, auth.token)
+    ElMessage.success(`已重置「${row.display_name || row.username}」的密码`)
+    resetVisible.value = false
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    resetting.value = false
+  }
+}
+
 async function removeUser(row: UserInfo) {
   try {
     await ElMessageBox.confirm(`确定删除用户「${row.display_name || row.username}」？`, '删除确认', {
@@ -98,8 +131,9 @@ async function removeUser(row: UserInfo) {
             <el-tag size="small" type="success" effect="plain">{{ row.role }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }: { row: UserInfo }">
+            <el-button link type="primary" size="small" @click="openReset(row)">重置密码</el-button>
             <el-button
               link
               type="danger"
@@ -134,6 +168,18 @@ async function removeUser(row: UserInfo) {
         <el-button type="primary" :loading="creating" @click="submitCreate">确定</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="resetVisible" title="重置密码" width="420px">
+      <p class="reset-hint">
+        为「{{ resetTarget?.display_name || resetTarget?.username }}」设置新的登录密码，旧密码立即失效。
+      </p>
+      <el-input v-model="resetPassword" type="password" show-password
+                placeholder="至少 6 位" @keyup.enter="submitReset" />
+      <template #footer>
+        <el-button @click="resetVisible = false">取消</el-button>
+        <el-button type="primary" :loading="resetting" @click="submitReset">确定重置</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -141,4 +187,5 @@ async function removeUser(row: UserInfo) {
 .accounts-page { display: flex; flex-direction: column; gap: 14px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; }
 .page-head h2 { margin: 0; font-size: 18px; font-weight: 600; color: v-bind(theme.textColorPrimary); }
+.reset-hint { margin: 0 0 12px; font-size: 13.5px; line-height: 1.7; color: v-bind(theme.textColorSecondary); }
 </style>

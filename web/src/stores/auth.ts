@@ -1,6 +1,6 @@
 // 登录态：token / 当前用户，localStorage 持久化（刷新后不丢登录）。
 import { defineStore } from 'pinia'
-import { login as apiLogin, type UserInfo } from '../api/auth'
+import { login as apiLogin, register as apiRegister, type UserInfo } from '../api/auth'
 
 const TOKEN_KEY = 'medirag_token'
 const USER_KEY = 'medirag_user'
@@ -23,6 +23,13 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async login(username: string, password: string) {
       const { token, user } = await apiLogin(username, password)
+      this.token = token; this.user = user
+      localStorage.setItem(TOKEN_KEY, token)
+      localStorage.setItem(USER_KEY, JSON.stringify(user))
+    },
+    /** 自助注册：后端直接返回 token，注册成功即视为已登录 */
+    async register(username: string, password: string, displayName = '') {
+      const { token, user } = await apiRegister(username, password, displayName)
       this.token = token; this.user = user
       localStorage.setItem(TOKEN_KEY, token)
       localStorage.setItem(USER_KEY, JSON.stringify(user))

@@ -44,6 +44,15 @@ export async function createUser(body: CreateUserBody, token: string): Promise<U
   return resp.json()
 }
 
+/** 管理员重置指定用户密码（登录页「忘记密码」的唯一落地点）。 */
+export async function resetUserPassword(id: number, newPassword: string, token: string): Promise<void> {
+  const resp = await fetch(`/api/users/${id}/password`, {
+    method: 'PUT', headers: authHeaders(token, true),
+    body: JSON.stringify({ new_password: newPassword }),
+  })
+  if (!resp.ok) return fail(resp, '重置密码失败')
+}
+
 export async function deleteUser(id: number, token: string): Promise<void> {
   const resp = await fetch(`/api/users/${id}`, { method: 'DELETE', headers: authHeaders(token) })
   if (!resp.ok) return fail(resp, '删除用户失败')

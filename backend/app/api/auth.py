@@ -54,15 +54,50 @@ class LoginBody(BaseModel):
     password: str
 
 
+def _user_dict(u: User) -> dict:
+    return {"id": u.id, "username": u.username, "display_name": u.display_name,
+            "role": u.role}
+
+
 @router.post("/auth/login")
 def login(body: LoginBody) -> dict:
     with session_scope() as s:
         u = s.query(User).filter(User.username == body.username).first()
         if u is None or u.password_hash != _hash(body.username, body.password):
             raise HTTPException(status_code=401, detail="用户名或密码错误")
-        return {"token": _token(u), "user": {
-            "id": u.id, "username": u.username, "display_name": u.display_name,
-            "role": u.role}}
+        return {"token": _token(u), "user": _user_dict(u)}
+
+
+# 自助注册只能拿到最低权限角色。角色**刻意不从请求体读取**：一旦可传 role，
+# 任何人构造一条请求就能把自己注册成管理员。
+SELF_REGISTER_ROLE = "知识用户"
+
+
+class RegisterBody(BaseModel):
+    username: str
+    password: str
+    display_name: str = ""
+
+
+@router.post("/auth/register")
+def register(body: RegisterBody) -> dict:
+    """自助注册（登录页「立即注册」）：成功后直接返回 token，前端免二次登录。"""
+    username = body.username.strip()
+    if not 3 <= len(username) <= 20:
+        raise HTTPException(status_code=422, detail="用户名需 3–20 个字符")
+    if len(body.password) < 6:
+        raise HTTPException(status_code=422, detail="密码至少 6 位")
+    display_name = body.display_name.strip() or username
+    if len(display_name) > 50:
+        raise HTTPException(status_code=422, detail="姓名不超过 50 字")
+    with session_scope() as s:
+        if s.query(User).filter(User.username == username).first() is not None:
+            raise HTTPException(status_code=409, detail="用户名已被占用")
+        u = User(username=username, display_name=display_name,
+                 role=SELF_REGISTER_ROLE, password_hash=_hash(username, body.password))
+        s.add(u)
+        s.flush()
+        return {"token": _token(u), "user": _user_dict(u)}
 
 
 @router.get("/auth/me")

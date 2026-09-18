@@ -41,6 +41,29 @@ def create_user(body: UserBody, _: User = Depends(require_admin)) -> dict:
                 "role": u.role}
 
 
+class ResetPasswordBody(BaseModel):
+    new_password: str
+
+
+@router.put("/users/{user_id}/password")
+def reset_password(user_id: int, body: ResetPasswordBody,
+                   _: User = Depends(require_admin)) -> dict:
+    """管理员重置指定用户密码。
+
+    这是登录页「忘记密码」的唯一落地点：系统未接入邮件/短信，无法做自助找回，
+    只能由管理员核对身份后重置（此前只能删号重建，会连带丢掉该账号的问答记录）。
+    改的密码按登录名取哈希，与登录/改密路径一致。
+    """
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=422, detail="密码至少 6 位")
+    with session_scope() as s:
+        row = s.get(User, user_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        row.password_hash = _hash(row.username, body.new_password)
+    return {"id": user_id, "ok": True}
+
+
 @router.delete("/users/{user_id}")
 def delete_user(user_id: int, u: User = Depends(require_admin)) -> dict:
     if user_id == u.id:
