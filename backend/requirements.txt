@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 # 阶段 0：最小可运行依赖（后续阶段按需追加）
+# 本文件含中文注释；中文 Windows 下 pip 默认按 GBK 读取，故须保留首行编码声明。
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
 pydantic-settings>=2.4,<3

@@ -1,37 +1,49 @@
 <script setup lang="ts">
-// 登录页 —— 布局与文案依据《前端还原规格.md》P0-1（截图原文，不得自造）
-// 提交动作接 POST /api/auth/login，成功后写入 store 并进入工作台
+// 登录页 —— 版式参照 docs/原项目前端展示图（部分）的登录截图：
+// 页面居中悬浮卡片，左侧品牌区（渐变主色 + 标语 + 短横线要点 + 装饰引号 + 版权），右侧白色表单区
+// （小字距标签 + 大标题 + 短下划线 + 仅下边框输入框 + 行内错误 + 全宽按钮 + 虚线分隔的演示账号）。
+// 文案沿用本项目自身表述，不照抄参考图原文。提交动作接 POST /api/auth/login。
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
+import { theme } from '../styles/theme'
 
 const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(false)
 const form = reactive({ username: '', password: '', remember: true })
+const usernameError = ref('')
+const passwordError = ref('')
 
-const features = [
-  { icon: '📓', title: '典籍文献统一入库', desc: '完整保留原文、章节与切片证据' },
-  { icon: '🔗', title: '实体关系审核发布', desc: '候选知识通过人工审核后进入图谱' },
-  { icon: '💬', title: '问答结论全程溯源', desc: '同步展示文献证据与图谱关系' },
+// 左栏要点：每条以短横线起头，短句陈述系统能力
+const highlights = [
+  '三路混合检索：向量 + BM25 + 图谱，RRF 融合召回',
+  'Cross-Encoder 精排，按证据相关度重排序',
+  '实体关系审核发布，候选知识经人工确认入图谱',
+  '来源可溯，每条引用均可回查原文与章节',
 ]
 
 const demoAccounts = [
-  { label: '管理员', username: 'admin' },
-  { label: '知识用户', username: 'user1' },
+  { label: '管理员', username: 'admin', password: 'admin123' },
+  { label: '知识用户', username: 'user1', password: 'admin123' },
 ]
 
-function fillAccount(username: string) {
-  form.username = username
-  form.password = ''
+function fillAccount(acc: (typeof demoAccounts)[number]) {
+  form.username = acc.username
+  form.password = acc.password
+  usernameError.value = ''
+  passwordError.value = ''
+}
+
+function validate() {
+  usernameError.value = form.username ? '' : '请输入用户名'
+  passwordError.value = form.password ? '' : '请输入密码'
+  return !usernameError.value && !passwordError.value
 }
 
 async function handleLogin() {
-  if (!form.username || !form.password) {
-    ElMessage.warning('请输入用户名和密码')
-    return
-  }
+  if (!validate()) return
   loading.value = true
   try {
     await auth.login(form.username, form.password)
@@ -47,88 +59,88 @@ async function handleLogin() {
 
 <template>
   <div class="login-page">
-    <header class="login-header">
-      <div class="brand">
-        <div class="brand-icon">🌿</div>
-        <div>
-          <div class="brand-name">本草智问</div>
-          <div class="brand-sub">企业级中医药知识工作台</div>
-        </div>
-      </div>
-      <div class="header-right"><el-icon><Lock /></el-icon> 权限分级 · 知识可追溯</div>
-    </header>
-
-    <div class="login-body">
+    <!-- 漂浮光斑：与 ::before/::after 组成三个异步运动的彩斑 -->
+    <div class="blob blob-warm"></div>
+    <div class="login-card">
       <!-- 左侧品牌区 -->
       <section class="brand-panel">
-        <span class="panel-tag">中医药知识基础设施</span>
-        <h1>基于知识图谱与 RAG 的<br />中医药智能问答系统</h1>
+        <div class="brand-top">
+          <div class="brand-icon">🌿</div>
+          <div class="brand-name">本草智问</div>
+        </div>
+
+        <div class="brand-tag">INTELLIGENT TCM KNOWLEDGE CONSULTATION</div>
+
+        <h1>中医药知识<br />智能问答平台</h1>
+
         <p class="panel-desc">
-          统一连接典籍文献、知识图谱与智能问答，让团队在同一可信语境中检索、审核与复用知识。
+          融合多路向量检索、BM25 全文检索与知识图谱推理，基于典籍文献与企业知识库给出有据可查的专业回答。
         </p>
-        <ul class="feature-list">
-          <li v-for="f in features" :key="f.title">
-            <span class="feature-icon">{{ f.icon }}</span>
-            <div>
-              <div class="feature-title">{{ f.title }}</div>
-              <div class="feature-desc">{{ f.desc }}</div>
-            </div>
-          </li>
-        </ul>
-        <div class="panel-tip"><el-icon><InfoFilled /></el-icon> 候选知识经人工审核后发布，回答结论保留原文证据</div>
+
+        <div class="feature-wrap">
+          <span class="quote quote-open">“</span>
+          <ul class="feature-list">
+            <li v-for="item in highlights" :key="item">{{ item }}</li>
+          </ul>
+          <span class="quote quote-close">”</span>
+        </div>
+
+        <div class="copyright">© 2026 本草智问 · 中医药智能问答平台</div>
       </section>
 
       <!-- 右侧登录表单区 -->
       <section class="form-panel">
-        <div class="form-header">
-          <div class="org">组织账号</div>
-          <h2>登录工作台</h2>
-          <p>使用您的本草智问账号继续</p>
-        </div>
+        <div class="form-tag">BENCAO RAG PLATFORM</div>
+        <h2>欢迎登录</h2>
+        <div class="title-bar"></div>
 
-        <el-form label-position="top">
-          <el-form-item label="用户名" required>
-            <el-input v-model="form.username" placeholder="admin">
+        <el-form label-position="top" @submit.prevent>
+          <div class="field">
+            <label class="field-label">用户名</label>
+            <el-input v-model="form.username" placeholder="请输入用户名" @input="usernameError = ''" @keyup.enter="handleLogin">
               <template #prefix><el-icon><User /></el-icon></template>
             </el-input>
-          </el-form-item>
-          <el-form-item label="密码" required>
-            <el-input v-model="form.password" type="password" placeholder="请输入密码" show-password>
+            <div v-if="usernameError" class="field-error">{{ usernameError }}</div>
+          </div>
+
+          <div class="field">
+            <label class="field-label">密码</label>
+            <el-input
+              v-model="form.password"
+              type="password"
+              placeholder="请输入密码"
+              show-password
+              @input="passwordError = ''"
+              @keyup.enter="handleLogin"
+            >
               <template #prefix><el-icon><Lock /></el-icon></template>
             </el-input>
-          </el-form-item>
+            <div v-if="passwordError" class="field-error">{{ passwordError }}</div>
+          </div>
         </el-form>
 
         <div class="form-aux">
-          <el-checkbox v-model="form.remember">记住用户名</el-checkbox>
+          <el-checkbox v-model="form.remember">记住我</el-checkbox>
           <el-link type="primary" :underline="false">忘记密码？</el-link>
         </div>
 
-        <el-button type="primary" class="login-btn" :loading="loading" @click="handleLogin">登录工作台</el-button>
+        <el-button type="primary" class="login-btn" :loading="loading" @click="handleLogin">立即登录</el-button>
 
-        <div class="register-tip">还没有组织账号？ <el-link type="primary">申请注册</el-link></div>
+        <div class="register-tip">还没有账号？ <el-link type="primary" :underline="false">立即注册</el-link></div>
 
         <div class="demo-area">
-          <div class="demo-head">
-            <span>体验环境</span>
-            <span class="demo-sub">选择账号后自动填充</span>
-            <el-tag size="small" type="info">仅开发环境</el-tag>
-          </div>
+          <div class="demo-head"><span>演示账号（点按自动填充）</span></div>
           <div
             v-for="acc in demoAccounts"
             :key="acc.username"
             class="demo-card"
-            @click="fillAccount(acc.username)"
+            @click="fillAccount(acc)"
           >
-            <div>
-              <div class="demo-label">{{ acc.label }}</div>
-              <div class="demo-user">{{ acc.username }}</div>
-            </div>
-            <el-icon><ArrowRight /></el-icon>
+            <span class="demo-chip">{{ acc.label }}</span>
+            <span class="demo-cred">{{ acc.username }} / {{ acc.password }}</span>
+            <el-icon class="demo-icon"><CopyDocument /></el-icon>
           </div>
         </div>
-
-        <p class="security-tip">系统仅面向授权用户，访问行为受角色权限控制。</p>
       </section>
     </div>
   </div>
@@ -136,232 +148,516 @@ async function handleLogin() {
 
 <style scoped>
 .login-page {
+  position: relative;
+  /* Claude 风格排版：页面所有文字统一走衬线体族（拉丁 Source Serif 4，中文思源宋体/宋体回落） */
+  font-family: v-bind(theme.fontDisplay);
   min-height: 100%;
-  background: #f5f7f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  box-sizing: border-box;
+  overflow: hidden;
+  /* 渐变底 + 光斑：为毛玻璃提供可模糊的层次（彩斑加浓，透出卡片更明显） */
+  background:
+    radial-gradient(900px 520px at 12% 18%, rgba(82, 183, 136, 0.5), transparent 60%),
+    radial-gradient(820px 560px at 88% 82%, rgba(45, 106, 79, 0.48), transparent 62%),
+    radial-gradient(640px 440px at 80% 14%, rgba(116, 198, 157, 0.42), transparent 65%),
+    radial-gradient(560px 400px at 20% 88%, rgba(188, 108, 37, 0.14), transparent 68%),
+    linear-gradient(150deg, #e8f4ec, v-bind(theme.pageBg) 45%, #dcebe2);
+}
+
+.login-page::before,
+.login-page::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.login-page::before {
+  width: 480px;
+  height: 480px;
+  left: -140px;
+  top: -160px;
+  background: rgba(82, 183, 136, 0.5);
+  animation: blob-drift-a 12s ease-in-out infinite alternate;
+}
+
+.login-page::after {
+  width: 540px;
+  height: 540px;
+  right: -180px;
+  bottom: -200px;
+  background: rgba(45, 106, 79, 0.45);
+  animation: blob-drift-b 15s ease-in-out infinite alternate;
+}
+
+/* 第三个光斑：暖色点缀，独立周期异步漂浮 */
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.blob-warm {
+  width: 380px;
+  height: 380px;
+  right: 18%;
+  top: -150px;
+  background: rgba(116, 198, 157, 0.42);
+  animation: blob-drift-c 18s ease-in-out infinite alternate;
+}
+
+@keyframes blob-drift-a {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(160px, 90px) scale(1.18); }
+  100% { transform: translate(300px, 40px) scale(0.92); }
+}
+
+@keyframes blob-drift-b {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(-190px, -110px) scale(0.9); }
+  100% { transform: translate(-60px, -200px) scale(1.15); }
+}
+
+@keyframes blob-drift-c {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(-220px, 190px) scale(1.22); }
+  100% { transform: translate(-120px, 320px) scale(0.95); }
+}
+
+/* 动效敏感用户（ vestibular 障碍等）关闭漂浮 */
+@media (prefers-reduced-motion: reduce) {
+  .login-page::before,
+  .login-page::after,
+  .blob-warm {
+    animation: none;
+  }
+}
+
+/* Element Plus 部分组件不继承外层字体，统一拉回 Claude 字体族 */
+.login-page :deep(.el-button),
+.login-page :deep(.el-input__inner),
+.login-page :deep(.el-checkbox__label),
+.login-page :deep(.el-link__inner),
+.login-page :deep(.el-message-box),
+.login-page :deep(.el-form-item__label) {
+  font-family: v-bind(theme.fontDisplay);
+}
+
+/* ===== 卡片：iOS 液态玻璃（Liquid Glass） =====
+   ① 高透底 + 强模糊/增饱和/微提亮（背景光斑透过呈流动折射）
+   ② 渐变折射描边：mask 挖空中心只留一圈，上亮下暗模拟玻璃厚边
+   ③ 镜面高光层：左上弧形反光 + 斜向扫光，压在内容之上做表面反光膜 */
+.login-card {
+  position: relative;
+  z-index: 1;
+  width: min(1000px, 100%);
+  min-height: 660px;
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  border-radius: 24px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(46px) saturate(180%) brightness(1.06);
+  backdrop-filter: blur(46px) saturate(180%) brightness(1.06);
+  box-shadow:
+    0 30px 76px rgba(26, 50, 32, 0.28),
+    0 4px 16px rgba(26, 50, 32, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* 折射描边：中心被 mask 挖空，只留 1.5px 渐变边 */
+.login-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(135deg,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(255, 255, 255, 0.38) 24%,
+    rgba(255, 255, 255, 0.10) 50%,
+    rgba(255, 255, 255, 0.32) 76%,
+    rgba(255, 255, 255, 0.72) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* 镜面高光：只保留一道很淡的斜向扫光，不做大面积反光（压深色左栏会显假） */
+.login-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(105deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.07) 48%,
+    transparent 60%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* ===== 左侧品牌区：半透明深绿玻璃 ===== */
+.brand-panel {
+  position: relative;
+  overflow: hidden;
+  padding: 48px 44px;
   display: flex;
   flex-direction: column;
+  color: #fff;
+  background: linear-gradient(160deg, rgba(45, 106, 79, 0.85), rgba(26, 50, 32, 0.78));
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  backdrop-filter: blur(28px) saturate(1.4);
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
 }
 
-.login-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 32px;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+.brand-panel::after {
+  content: '';
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  right: -120px;
+  bottom: -140px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.brand {
+.brand-top {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
 .brand-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: #2d6a4f;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.16);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .brand-name {
+  font-family: v-bind(theme.fontDisplay);
+  font-size: 25px;
   font-weight: 600;
-  font-size: 16px;
+  letter-spacing: 0.2px;
 }
 
-.brand-sub {
+.brand-tag {
+  margin-top: 34px;
   font-size: 12px;
-  color: #6b7280;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: #6b7280;
-  font-size: 13px;
-}
-
-.login-body {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 55% 45%;
-  min-height: 0;
-}
-
-/* 左侧品牌区 */
-.brand-panel {
-  background: #1a3220;
-  color: #fff;
-  padding: 56px 64px;
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-
-.panel-tag {
-  align-self: flex-start;
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.85);
-  border-radius: 999px;
-  padding: 4px 14px;
-  font-size: 13px;
+  letter-spacing: 2.2px;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .brand-panel h1 {
-  font-size: 28px;
+  margin: 16px 0 0;
+  font-family: v-bind(theme.fontDisplay);
+  font-size: 34px;
+  /* 600 命中中文 600 字重子集（真加粗），不会落到浏览器的合成加粗 */
   font-weight: 600;
   line-height: 1.4;
-  margin: 0;
+  letter-spacing: 0;
 }
 
 .panel-desc {
-  color: rgba(255, 255, 255, 0.75);
-  line-height: 1.7;
-  margin: 0;
+  margin: 18px 0 0;
+  max-width: 410px;
+  font-size: 14px;
+  line-height: 1.85;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.feature-wrap {
+  position: relative;
+  margin-top: 30px;
+  padding: 4px 8px;
 }
 
 .feature-list {
   list-style: none;
+  margin: 0;
   padding: 0;
-  margin: 12px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
 }
 
 .feature-list li {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
+  position: relative;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.88);
 }
 
-.feature-icon {
-  font-size: 20px;
+.feature-list li::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: rgba(255, 255, 255, 0.5);
 }
 
-.feature-title {
-  font-weight: 600;
-  font-size: 15px;
+.quote {
+  position: absolute;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 60px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
 }
 
-.feature-desc {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 13px;
-  margin-top: 2px;
+.quote-open {
+  top: -18px;
+  left: -8px;
 }
 
-.panel-tip {
+.quote-close {
+  right: -4px;
+  bottom: -30px;
+}
+
+.copyright {
   margin-top: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 13px;
+  padding-top: 24px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.6);
 }
 
-/* 右侧表单区 */
+/* ===== 右侧表单区：一层淡磨砂玻璃纱，文字可读 ===== */
+/* 右栏：白纱减淡 + 局部加饱和提亮，让背景光斑更「果冻」地透出来 */
 .form-panel {
-  background: #fff;
-  padding: 48px 56px;
+  position: relative;
+  padding: 48px 44px;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  background: linear-gradient(190deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.02));
+  -webkit-backdrop-filter: blur(14px) saturate(175%) brightness(1.05);
+  backdrop-filter: blur(14px) saturate(175%) brightness(1.05);
 }
 
-.org {
+.form-tag {
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: v-bind(theme.textColorMuted);
+}
+
+.form-panel h2 {
+  margin: 10px 0 14px;
+  font-family: v-bind(theme.fontDisplay);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: v-bind(theme.textColorPrimary);
+}
+
+.title-bar {
+  width: 42px;
+  height: 3px;
+  border-radius: 2px;
+  background: v-bind(theme.colorPrimary);
+  margin-bottom: 24px;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 8px;
   font-size: 13px;
-  color: #6b7280;
+  color: v-bind(theme.textColorMuted);
 }
 
-.form-header h2 {
-  margin: 4px 0;
-  font-size: 22px;
+.field-error {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: v-bind(theme.colorError);
 }
 
-.form-header p {
-  color: #6b7280;
-  font-size: 13px;
-  margin: 0 0 20px;
+.field-error::before {
+  content: '!';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 5px;
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 12px;
+  text-align: center;
+  color: v-bind(theme.cardBg);
+  background: v-bind(theme.colorError);
+}
+
+/* 输入框改为「仅下边框」线性样式，贴合参考图 */
+:deep(.el-input__wrapper) {
+  padding: 2px 0 9px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none !important;
+  border-bottom: 1px solid v-bind(theme.borderColor);
+  transition: border-color 0.2s;
+}
+
+:deep(.el-input__wrapper.is-focus),
+:deep(.el-input__wrapper:hover) {
+  border-bottom-color: v-bind(theme.colorPrimary);
+}
+
+:deep(.el-input__prefix) {
+  margin-right: 6px;
+  color: v-bind(theme.textColorMuted);
+}
+
+:deep(.el-input__inner) {
+  color: v-bind(theme.textColorPrimary);
+}
+
+:deep(.el-input__inner::placeholder) {
+  color: v-bind(theme.textColorMuted);
 }
 
 .form-aux {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 18px;
+  margin: 6px 0 26px;
+}
+
+.form-aux :deep(.el-checkbox__label) {
+  font-size: 13.5px;
+  color: v-bind(theme.textColorSecondary);
+}
+
+.form-aux :deep(.el-link__inner) {
+  font-size: 13.5px;
+  color: v-bind(theme.colorPrimary);
 }
 
 .login-btn {
   width: 100%;
-  height: 42px;
+  height: 46px;
   font-size: 15px;
+  letter-spacing: 4px;
+  border-radius: 8px;
 }
 
 .register-tip {
+  margin-top: 18px;
   text-align: center;
-  font-size: 13px;
-  color: #6b7280;
-  margin: 14px 0 22px;
+  font-size: 13.5px;
+  color: v-bind(theme.textColorSecondary);
+}
+
+.register-tip :deep(.el-link__inner) {
+  font-size: 13.5px;
+  color: v-bind(theme.colorPrimary);
 }
 
 .demo-area {
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 14px;
-  background: #fafbfa;
+  margin-top: 34px;
 }
 
 .demo-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  margin-bottom: 10px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
-.demo-sub {
-  font-weight: 400;
-  color: #6b7280;
-  font-size: 12px;
+/* 虚线只画在文字两侧，避免用实心底色遮挡（玻璃面板上会露馅） */
+.demo-head::before,
+.demo-head::after {
+  content: '';
   flex: 1;
+  border-top: 1px dashed v-bind(theme.borderColor);
+}
+
+.demo-head span {
+  font-size: 12px;
+  letter-spacing: 1.2px;
+  color: v-bind(theme.textColorMuted);
 }
 
 .demo-card {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
+  gap: 12px;
   padding: 10px 14px;
-  margin-top: 8px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.4);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background 0.2s;
 }
 
 .demo-card:hover {
-  border-color: #2d6a4f;
+  border-color: v-bind(theme.colorPrimary);
+  background: rgba(255, 255, 255, 0.65);
 }
 
-.demo-label {
-  font-size: 14px;
-  font-weight: 600;
+.demo-chip {
+  padding: 2px 10px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: v-bind(theme.colorPrimary);
+  background: rgba(255, 255, 255, 0.65);
 }
 
-.demo-user {
-  font-size: 12px;
-  color: #6b7280;
+.demo-cred {
+  flex: 1;
+  font-size: 13.5px;
+  color: v-bind(theme.textColorBody);
 }
 
-.security-tip {
-  margin-top: 18px;
-  font-size: 12px;
-  color: #9ca3af;
-  text-align: center;
+.demo-icon {
+  color: v-bind(theme.textColorMuted);
+}
+
+.demo-card:hover .demo-icon {
+  color: v-bind(theme.colorPrimary);
+}
+
+@media (max-width: 900px) {
+  .login-card {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .brand-panel {
+    padding: 36px 32px;
+  }
+
+  .brand-panel h1 {
+    font-size: 26px;
+  }
+
+  .copyright {
+    padding-top: 20px;
+  }
+
+  .form-panel {
+    padding: 36px 32px;
+  }
 }
 </style>

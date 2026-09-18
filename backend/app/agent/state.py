@@ -8,9 +8,10 @@ class AgentState(TypedDict):
     session_id: str                   # 会话标识（多轮记忆）
     chat_history: list                # [{"role": "user"|"assistant", "content": str}, ...]
     rewritten_query: str              # 理解/反思后的检索查询
+    sub_queries: list                 # 子查询 [{"query", "entities"}]（查询分解；单查询时仅一项）
     entities: list                    # [{"name", "type", "matched"}, ...]
     entity_names: list                # 实体名的扁平列表（供图谱检索）
-    intent: str                       # relation / concept / complex / chitchat
+    intent: str                       # relation / concept / complex / compare / chitchat
     plan: list                        # 本次路由的工具名列表（vector_search / keyword_search / graph_search）
     vector_hits: list                 # 向量召回
     keyword_hits: list                # 关键词召回
@@ -19,6 +20,8 @@ class AgentState(TypedDict):
     evidence: list                    # rerank 后最终证据
     confidence: float                 # max(evidence.score)
     low_confidence: bool              # 阈值判定
+    sub_query_covered: list           # 各子查询是否有过阈证据（覆盖度；compare 据此标注无依据的实体）
+    sub_query_scores: list            # 各子查询的精排最高分（覆盖度原始信号，供调阈值与排查）
     reflect_count: int                # 自反思轮次（硬上限 1）
     safety_flag: str | None           # emergency / low_confidence / ok
     safety_message: str               # 急救提示或拒答话术（safety 节点产出）

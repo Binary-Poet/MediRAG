@@ -40,6 +40,7 @@ def _initial_state(body: StreamBody, session_id: str, history: list[dict]) -> di
         "entities": [], "entity_names": [], "intent": "", "plan": [],
         "vector_hits": [], "keyword_hits": [], "graph_facts": [], "fused": [],
         "evidence": [], "confidence": 0.0, "low_confidence": False, "reflect_count": 0,
+        "sub_query_covered": [],
         "safety_flag": None, "safety_message": "", "prompt": "", "answer": "",
         "trace": [],
         "inference": cfg,
