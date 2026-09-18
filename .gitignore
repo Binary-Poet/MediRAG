@@ -29,5 +29,13 @@ backend/stage3_graph_results.json
 .DS_Store
 Thumbs.db
 
-# 设计与改造文档、参考截图（仅本地留存，不入库；如需强制提交用 git add -f docs/...）
-docs/
+# 设计与改造文档、参考截图：docs 默认不入库，仅放行「被项目引用」的文件
+#   - docs/MediRAG-合并改造方案.md   ← AGENTS.md、backend/app/config.py 引用（架构/接口/SSE 协议主线）
+#   - docs/前端还原规格.md           ← AGENTS.md 与多处前端注释引用（前端验收真源）
+#   - docs/原项目前端展示图（部分）/  ← 规格文档标称的 8 张来源截图 + Login.vue 引用的登录参考图
+# 其余 docs 内容（计划文档、原项目资料等）一律不入库；确需临时提交用 git add -f docs/<文件>
+docs/**
+!docs/MediRAG-合并改造方案.md
+!docs/前端还原规格.md
+!docs/原项目前端展示图（部分）/
+!docs/原项目前端展示图（部分）/*
