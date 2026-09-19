@@ -11,6 +11,7 @@ import SessionList from './components/SessionList.vue'
 import { useSessionStore } from '../../stores/session'
 import TraceDialog from './components/TraceDialog.vue'
 import TraceSteps from './components/TraceSteps.vue'
+import UploadDialog from '../knowledge/UploadDialog.vue'
 
 interface QA {
   question: string
@@ -43,6 +44,10 @@ const listRef = ref<HTMLElement>()
 const inputRef = ref<{ focus: () => void }>()
 const traceVisible = ref(false)
 const currentTrace = ref<StepEvent[]>([])
+const uploadVisible = ref(false)
+const listening = ref(false)
+const recognition = ref<any>(null)
+const voiceBase = ref('')
 
 const sessionStore = useSessionStore()
 
@@ -113,6 +118,7 @@ function isThinking(i: number, m: QA): boolean {
 async function send(q?: string) {
   const question = (q ?? input.value).trim()
   if (!question || loading.value) return
+  stopVoice()   // 发送即结束语音，避免转写继续落进已清空的输入框
   input.value = ''
   loading.value = true
   // reactive：流式回调闭包直接 mutate 代理对象才能触发视图更新
@@ -235,6 +241,63 @@ function onEnter(e: KeyboardEvent) {
     e.preventDefault()
     send()
   }
+}
+
+/** 附件上传：打开知识库上传弹窗（复用 Library 上传链路，规格 P0-6），可持续充实语料。 */
+function openUpload() {
+  if (loading.value) return   // 流式进行中不打开，避免并发操作
+  uploadVisible.value = true
+}
+
+/** 语音输入：Web Speech API（Chrome/Edge）转写中文。
+ *  识别中开启 interimResults，实时把捕获文字写进输入框；
+ *  再次点击结束（onend）后，只保留最终整理完成的文本。 */
+function toggleVoice() {
+  if (loading.value) return
+  if (listening.value) { stopVoice(); return }
+  const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  if (!SR) {
+    ElMessage.warning('当前浏览器不支持语音输入，请使用 Chrome 或 Edge')
+    return
+  }
+  const rec = new SR()
+  voiceBase.value = input.value        // 记住开始前已有的文字，结束整理时不影响它
+  let finalText = ''                   // 已确认（isFinal）的转写累积
+  rec.lang = 'zh-CN'
+  rec.continuous = false
+  rec.interimResults = true
+  rec.onstart = () => { listening.value = true }
+  rec.onresult = (e: any) => {
+    let interim = ''
+    for (let i = 0; i < e.results.length; i += 1) {
+      const r = e.results[i]
+      if (r.isFinal) finalText += r[0].transcript
+      else interim += r[0].transcript
+    }
+    const now = (finalText + interim).trim()
+    input.value = voiceBase.value && now ? `${voiceBase.value} ${now}` : (now || voiceBase.value)
+  }
+  rec.onend = () => {
+    listening.value = false
+    recognition.value = null
+    // 结束只保留最终整理文本；未识别到任何内容则复原原有文字
+    const final = finalText.trim()
+    input.value = voiceBase.value && final ? `${voiceBase.value} ${final}` : (final || voiceBase.value)
+    finalText = ''
+  }
+  rec.onerror = (e: any) => {
+    // 错误导致提前结束：子置 feedback，置位交给 onend
+    if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') ElMessage.error('麦克风权限被拒绝')
+    else if (e?.error && e?.error !== 'aborted') ElMessage.warning(`语音识别失败：${e.error}`)
+  }
+  recognition.value = rec
+  try { rec.start() } catch { listening.value = false; recognition.value = null }
+}
+
+function stopVoice() {
+  recognition.value?.stop()
+  recognition.value = null
+  listening.value = false
 }
 </script>
 
@@ -364,21 +427,47 @@ function onEnter(e: KeyboardEvent) {
     </div>
 
     <div class="input-bar">
-      <el-input
-        ref="inputRef"
-        v-model="input"
-        type="textarea"
-        :autosize="{ minRows: 1, maxRows: 4 }"
-        resize="none"
-        placeholder="输入中医药知识问题，按 Enter 发送 (Shift+Enter 换行)"
-        :disabled="loading"
-        @keydown.enter="onEnter"
-      />
+      <!-- 输入区：链接上传 / 语音图标置于输入框内部右端（规格 P0-2）；
+           点击有「暂未开放」反馈，不留无响应的死按钮 -->
+      <div class="input-field">
+        <el-input
+          ref="inputRef"
+          v-model="input"
+          type="textarea"
+          :autosize="{ minRows: 1, maxRows: 4 }"
+          resize="none"
+          placeholder="输入中医药知识问题，按 Enter 发送"
+          :disabled="loading"
+          @keydown.enter="onEnter"
+        />
+        <div class="input-extras">
+          <el-tooltip content="附件上传" placement="top">
+            <button
+              class="input-extra"
+              type="button"
+              aria-label="附件上传"
+              :disabled="loading"
+              @click="openUpload"
+            ><el-icon><Link /></el-icon></button>
+          </el-tooltip>
+          <el-tooltip :content="listening ? '语音输入中…（点击结束）' : '语音输入'" placement="top">
+            <button
+              class="input-extra"
+              :class="{ active: listening }"
+              type="button"
+              aria-label="语音输入"
+              :disabled="loading"
+              @click="toggleVoice"
+            ><el-icon><Mic /></el-icon></button>
+          </el-tooltip>
+        </div>
+      </div>
       <el-button type="primary" :loading="loading" @click="send()">发送</el-button>
     </div>
     <p class="disclaimer">本答案仅提供中医药知识科普，不替代辨证、诊断或个体化处方。如有紧急情况请拨打 120。</p>
 
     <TraceDialog v-model:visible="traceVisible" :steps="currentTrace" :running="loading" />
+    <UploadDialog v-model:visible="uploadVisible" />
     </div>
   </div>
 </template>
@@ -419,6 +508,8 @@ function onEnter(e: KeyboardEvent) {
   color: v-bind(theme.colorPrimary);
   font-weight: 600;
   letter-spacing: 1px;
+  /* 居中文本带字距会整体左偏，等值缩进抵消 */
+  text-indent: 1px;
 }
 
 .empty-title {
@@ -508,14 +599,19 @@ function onEnter(e: KeyboardEvent) {
 }
 
 .qa-item {
-  margin-bottom: 24px;
+  /* 限制行长：正文最长约 820px（14px 下 ≈55 个汉字），超宽屏两侧留白而不是把行拉长 */
+  max-width: 820px;
+  margin: 0 auto 24px;
+  display: flex;
+  flex-direction: column;
 }
 
 .q {
-  display: inline-block;
+  /* 用户气泡靠左（需求：气泡置左），颜色/内边距不变，尾巴镜像到右下角 */
+  align-self: flex-start;
   background: v-bind(theme.colorPrimary);
   color: v-bind(theme.cardBg);
-  border-radius: 10px 10px 0 10px;
+  border-radius: 10px 10px 10px 0;
   padding: 8px 14px;
   margin-bottom: 10px;
   max-width: 70%;
@@ -525,7 +621,9 @@ function onEnter(e: KeyboardEvent) {
   /* 卡片内「思考过程 → 回答正文 → 注意事项」等相邻区块共用的纵向间距。
      正文原先上边距为 0、下边距 12px，视觉上像被思考块粘住，故两侧取同一值。 */
   --qa-block-gap: 12px;
-  background: v-bind(theme.autoSectionBg);
+  /* 卡片为纯白，内嵌块（思考过程）才用 autoSectionBg 浅灰绿——
+     原先卡片与思考块同为 #fafbfa，四层嵌套盒子靠边框硬分，层级糊成一片。 */
+  background: v-bind(theme.cardBg);
   border-color: v-bind(theme.borderColor);
 }
 
@@ -533,6 +631,8 @@ function onEnter(e: KeyboardEvent) {
   margin-top: var(--qa-block-gap);
   white-space: pre-wrap;
   line-height: 1.8;
+  /* 正文加粗一档（500 → 600）：回答是页面主内容，衬线 500 压纯白底偏轻 */
+  font-weight: 600;
 }
 
 /* 没有思考块时正文就是卡片首个子元素，不该再撑开上间距（否则上 32px、下 20px 不对称） */
@@ -713,6 +813,64 @@ function onEnter(e: KeyboardEvent) {
   align-items: flex-end;
   padding: 14px 20px 6px;
   border-top: 1px solid v-bind(theme.borderColor);
+}
+
+/* 输入框宿主：让右侧图标层绝对定位到输入框内部 */
+.input-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+/* 给文本右侧留出图标位，避免换行内容顶到图标 */
+.input-field :deep(.el-textarea__inner) {
+  padding-right: 72px;
+}
+
+/* 链接上传 / 语音图标层：垂直居中贴到输入框右端，与首行占位提示同一行 */
+.input-extras {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  z-index: 1;
+}
+
+/* 输入框内右侧图标（链接上传 / 语音输入） */
+.input-extra {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: v-bind(theme.textColorMuted);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.input-extra:hover:not(:disabled) {
+  background: v-bind(theme.hoverBg);
+  color: v-bind(theme.colorPrimary);
+}
+
+.input-extra:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* 语音识别进行中：图标高亮为按钮色 */
+.input-extra.active {
+  background: v-bind(theme.colorPrimary);
+  color: v-bind(theme.cardBg);
 }
 
 .disclaimer {

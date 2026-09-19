@@ -76,8 +76,6 @@ async function submitPwd() {
 
 <template>
   <div class="profile-page">
-    <div class="page-head"><h2>我的档案</h2></div>
-
     <el-card shadow="never" class="card">
       <div class="card-title">账号信息</div>
       <div class="info-rows">
@@ -128,7 +126,6 @@ async function submitPwd() {
 
 <style scoped>
 .profile-page { display: flex; flex-direction: column; gap: 14px; }
-.page-head h2 { margin: 0; font-size: 18px; font-weight: 600; color: v-bind(theme.textColorPrimary); }
 .card { background: v-bind(theme.cardBg); border-radius: v-bind(theme.borderRadius); }
 .card-title { font-size: 14px; font-weight: 600; color: v-bind(theme.textColorPrimary); margin-bottom: 12px; }
 .info-rows { display: flex; flex-direction: column; gap: 10px; }

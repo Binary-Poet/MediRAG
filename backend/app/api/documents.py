@@ -1,9 +1,11 @@
 """文档管理 API：上传（multipart）/列表/状态轮询/删除（方案第八节 + 规格 P0-6）。"""
+import io
 import uuid
+import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.api.auth import current_user
@@ -46,6 +48,10 @@ class DocumentOut(BaseModel):
 
 class RenameBody(BaseModel):
     name: str
+
+
+class BatchIdsBody(BaseModel):
+    ids: list[int]
 
 
 @router.post("/documents")
@@ -95,6 +101,74 @@ def list_documents() -> dict:
         docs = s.query(Document).order_by(Document.uploaded_at.desc()).all()
         items = [DocumentOut.of(d).model_dump() for d in docs]
         return {"total": len(items), "total_chunks": sum(d["chunk_count"] for d in items), "items": items}
+
+
+# 批量接口必须定义在 /documents/{doc_id} 之前，否则静态路径会被动态路由抢占导致 405
+@router.post("/documents/batch-delete")
+def batch_delete_documents(body: BatchIdsBody, _: User = Depends(current_user)) -> dict:
+    """批量删除：循环删除记录 + 逐文档从向量库剔除切片，最后统一重建 BM25。"""
+    ids = list(dict.fromkeys(body.ids))   # 去重保序
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids 不能为空")
+    names: list[str] = []
+    with session_scope() as s:
+        for doc_id in ids:
+            doc = s.get(Document, doc_id)
+            if doc is not None:
+                names.append(doc.name)
+                s.delete(doc)
+    store = get_store()
+    total_removed = 0
+    for name in names:
+        total_removed += store.remove_by_doc(name)
+    store.save()
+    rebuild_keyword_index()
+    return {"deleted": len(names), "removed_chunks": total_removed}
+
+
+@router.post("/documents/batch-download")
+def batch_download_documents(body: BatchIdsBody) -> StreamingResponse:
+    """批量下载：将多个源文件打包成 zip 流式返回。"""
+    ids = list(dict.fromkeys(body.ids))
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids 不能为空")
+    with session_scope() as s:
+        paths: list[tuple[str, Path]] = []
+        for doc_id in ids:
+            d = s.get(Document, doc_id)
+            if d is None:
+                continue
+            p = Path(d.stored_path).resolve()
+            if not str(p).startswith(str(UPLOAD_DIR.resolve())):
+                continue
+            if p.is_file():
+                paths.append((d.name, p))
+    if not paths:
+        raise HTTPException(status_code=404, detail="无可下载的文档")
+
+    def zip_stream():
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            used: set[str] = set()
+            for name, p in paths:
+                # 重名时自动加序号，避免 zip 内覆盖
+                safe = name
+                i = 1
+                while safe in used:
+                    stem = Path(name).stem
+                    ext = Path(name).suffix
+                    safe = f"{stem}_{i}{ext}"
+                    i += 1
+                used.add(safe)
+                zf.write(p, arcname=safe)
+        buf.seek(0)
+        yield from buf
+
+    return StreamingResponse(
+        zip_stream(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="documents.zip"'},
+    )
 
 
 @router.get("/documents/{doc_id}")

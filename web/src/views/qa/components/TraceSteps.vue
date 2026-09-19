@@ -111,7 +111,9 @@ function templateLabel(t: string): string {
       </div>
       <div class="num-card">
         <div class="num">{{ retrieve?.graph_n ?? '—' }}</div>
-        <div class="num-label">中医药图谱（{{ retrieve?.entity_n ?? 0 }} 命中实体）</div>
+        <!-- 文案缩短：原「中医药图谱（N 命中实体）」在 640px 弹窗的四分栏里必然折行，
+             且断点落在词中间（「命中实/体）」），四张卡视觉不齐 -->
+        <div class="num-label">图谱（命中 {{ retrieve?.entity_n ?? 0 }} 实体）</div>
       </div>
       <div class="num-card">
         <div class="num">{{ retrieve?.keyword_n ?? '—' }}</div>
@@ -155,11 +157,13 @@ function templateLabel(t: string): string {
 .step {
   flex: 1;
   text-align: center;
+}
+/* 待执行步只淡化圆点，标签保持可读：原先整步 0.45 透明，流程全貌反而读不出来 */
+.step:not(.done):not(.active) .step-dot {
   opacity: 0.45;
 }
-.step.done,
-.step.active {
-  opacity: 1;
+.step:not(.done):not(.active) .step-label {
+  color: v-bind(theme.textColorMuted);
 }
 .step-dot {
   width: 26px;
@@ -187,7 +191,9 @@ function templateLabel(t: string): string {
   border-radius: 8px;
   padding: 12px 14px;
   margin-bottom: 10px;
-  background: v-bind(theme.hoverBg);
+  /* 常驻浅底用 autoSectionBg，不用 hoverBg：
+     hoverBg 是交互反馈色，当静态底色用会让 hover 无颜色可加深，且满屏偏绿抢内容。 */
+  background: v-bind(theme.autoSectionBg);
 }
 .section-title {
   font-size: 13px;

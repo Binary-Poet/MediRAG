@@ -71,4 +71,9 @@ router.beforeEach((to) => {
   if (to.path !== '/login' && !auth.token) return '/login'
 })
 
+// 标签页标题随路由更新：多开标签时可区分页面（无 meta.title 的路由回落到站名）
+router.afterEach((to) => {
+  document.title = to.meta.title ? `${to.meta.title} · 本草智问` : '本草智问'
+})
+
 export default router

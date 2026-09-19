@@ -265,7 +265,8 @@ onMounted(() => {
 
 .sl-item.on {
   border-color: v-bind(theme.colorPrimary);
-  background: v-bind(theme.hoverBg);
+  /* 选中底比 hover 深一档（selectedBg）：原先与 hover 同色，选中后悬停无颜色可加深 */
+  background: v-bind(theme.selectedBg);
 }
 
 /* 前置对话气泡图标（规格 P0-2 会话项）：圆环 + 圆内三点 + 左下小尾巴，纯 CSS，无图标库依赖。
@@ -315,6 +316,8 @@ onMounted(() => {
 
 .sl-item-title {
   font-size: 13px;
+  /* 会话标题加粗一档：侧栏文字与正文同字重时扫视分不出条目 */
+  font-weight: 600;
   color: v-bind(theme.textColorBody);
   white-space: nowrap;
   overflow: hidden;
@@ -342,6 +345,19 @@ onMounted(() => {
 
 .sl-star.on {
   color: v-bind(theme.colorWarning);
+}
+
+/* 「更多」默认隐藏，悬停/选中/键盘聚焦时出现（规格 P0-2「悬停显示更多操作」）；
+   :focus-visible 保底可见，纯键盘操作不会丢入口 */
+.sl-more {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.sl-item:hover .sl-more,
+.sl-item.on .sl-more,
+.sl-more:focus-visible {
+  opacity: 1;
 }
 
 .sl-empty {

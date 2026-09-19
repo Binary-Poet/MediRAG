@@ -60,6 +60,34 @@ export async function deleteDocument(id: number): Promise<{ deleted: number; rem
   return resp.json()
 }
 
+/** 批量删除（鉴权写端点）。 */
+export async function batchDeleteDocuments(ids: number[]): Promise<{ deleted: number; removed_chunks: number }> {
+  const resp = await fetch('/api/documents/batch-delete', {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ids }),
+  })
+  if (!resp.ok) {
+    const detail = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }))
+    throw new Error(detail.detail ?? '批量删除失败')
+  }
+  return resp.json()
+}
+
+/** 批量下载（zip 流），返回 blob。 */
+export async function batchDownloadDocuments(ids: number[]): Promise<Blob> {
+  const resp = await fetch('/api/documents/batch-download', {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ids }),
+  })
+  if (!resp.ok) {
+    const detail = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }))
+    throw new Error(detail.detail ?? '批量下载失败')
+  }
+  return resp.blob()
+}
+
 export function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`

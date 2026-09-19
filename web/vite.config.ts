@@ -12,6 +12,11 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      // 健康检查（后端挂在根路径、无 /api 前缀）：顶栏服务状态灯轮询用
+      '/health': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
 })

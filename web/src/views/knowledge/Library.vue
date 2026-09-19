@@ -4,7 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { DocItem } from '../../types/knowledge'
 import { TOPICS } from '../../types/knowledge'
-import { humanSize, listDocuments, parseStatus, getDocument, downloadUrl, renameDocument, deleteDocument } from '../../api/documents'
+import { humanSize, listDocuments, parseStatus, getDocument, downloadUrl, renameDocument, deleteDocument, batchDeleteDocuments, batchDownloadDocuments } from '../../api/documents'
 import type { DocDetail } from '../../api/documents'
 import { theme } from '../../styles/theme'
 import UploadDialog from './UploadDialog.vue'
@@ -16,7 +16,14 @@ const filterTopic = ref('')
 const showUpload = ref(false)
 const detailVisible = ref(false)
 const detailDoc = ref<DocDetail | null>(null)
+const selected = ref<DocItem[]>([])
+const batchLoading = ref(false)
+const tableRef = ref()
 let timer: number | undefined
+
+function onRowClick(row: DocItem) {
+  tableRef.value?.toggleRowSelection(row)
+}
 
 const filtered = computed(() =>
   filterTopic.value ? docs.value.filter(d => d.topic === filterTopic.value) : docs.value)
@@ -84,6 +91,46 @@ function download(d: DocItem) {
   a.remove()
 }
 
+async function batchDownload() {
+  const ids = selected.value.map(d => d.id)
+  if (!ids.length) { ElMessage.warning('请先选择要下载的文献'); return }
+  batchLoading.value = true
+  try {
+    const blob = await batchDownloadDocuments(ids)
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `documents_${ids.length}.zip`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(a.href)
+    ElMessage.success(`已下载 ${ids.length} 个文件（zip）`)
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    batchLoading.value = false
+  }
+}
+
+async function batchDelete() {
+  const ids = selected.value.map(d => d.id)
+  if (!ids.length) { ElMessage.warning('请先选择要删除的文献'); return }
+  try {
+    await ElMessageBox.confirm(`确认删除选中的 ${ids.length} 篇文献？其切片将从检索库移除。`, '批量删除确认', { type: 'warning' })
+  } catch { return }
+  batchLoading.value = true
+  try {
+    const r = await batchDeleteDocuments(ids)
+    ElMessage.success(`已删除 ${r.deleted} 篇文献，移除 ${r.removed_chunks} 个切片`)
+    selected.value = []
+    refresh()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    batchLoading.value = false
+  }
+}
+
 async function rename(d: DocItem) {
   let value: string
   try {
@@ -141,9 +188,20 @@ onUnmounted(() => window.clearInterval(timer))
         <el-select v-model="filterTopic" placeholder="全部主题" clearable style="width: 160px">
           <el-option v-for="t in TOPICS" :key="t" :label="t" :value="t" />
         </el-select>
+        <div class="batch-actions">
+          <el-button :disabled="!selected.length" :loading="batchLoading" @click="batchDownload">
+            <el-icon><Download /></el-icon>&nbsp;批量下载{{ selected.length ? `（${selected.length}）` : '' }}
+          </el-button>
+          <el-button type="danger" :disabled="!selected.length" :loading="batchLoading" @click="batchDelete">
+            <el-icon><Delete /></el-icon>&nbsp;批量删除{{ selected.length ? `（${selected.length}）` : '' }}
+          </el-button>
+        </div>
       </div>
 
-      <el-table :data="filtered" style="width: 100%">
+      <el-table ref="tableRef" :data="filtered" style="width: 100%"
+                @selection-change="(val: DocItem[]) => selected = val"
+                @row-click="onRowClick">
+        <el-table-column type="selection" width="48" />
         <el-table-column prop="name" label="名称" min-width="200" show-overflow-tooltip />
         <el-table-column label="大小" width="100">
           <template #default="{ row }">{{ humanSize(row.size) }}</template>
@@ -159,10 +217,10 @@ onUnmounted(() => window.clearInterval(timer))
         <el-table-column prop="uploaded_at" label="上传时间" width="150" />
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="showDetail(row)">详情</el-button>
-            <el-button link type="primary" size="small" @click="download(row)">下载</el-button>
-            <el-button link type="primary" size="small" @click="rename(row)">重命名</el-button>
-            <el-button link type="danger" size="small" @click="removeDoc(row)">删除</el-button>
+            <el-button link type="primary" size="small" @click.stop="showDetail(row)">详情</el-button>
+            <el-button link type="primary" size="small" @click.stop="download(row)">下载</el-button>
+            <el-button link type="primary" size="small" @click.stop="rename(row)">重命名</el-button>
+            <el-button link type="danger" size="small" @click.stop="removeDoc(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -197,6 +255,7 @@ onUnmounted(() => window.clearInterval(timer))
 .stat-num { font-size: 26px; font-weight: 600; color: v-bind(theme.colorPrimary); }
 .stat-label { font-size: 13px; color: v-bind(theme.textColorSecondary); }
 .stat-actions { margin-left: auto; }
-.filter-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.filter-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 .filter-label { font-size: 13px; color: v-bind(theme.textColorSecondary); }
+.batch-actions { margin-left: auto; display: flex; gap: 10px; }
 </style>

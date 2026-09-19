@@ -79,10 +79,12 @@ function renderGraph(nodes: GraphNode[], links: GraphLink[]) {
         ? `${p.data.source} —${p.data.relation}→ ${p.data.target}`
         : `${p.name}${p.value ?? ''}`),
     },
-    legend: [{ data: TYPES, bottom: 0, textStyle: { fontSize: 11 } }],
+    // 6 类图例由右栏详情面板承担（左栏彩点+类型标签也在表达同一信息），画布底部不再重复铺一条，
+    // 腾出的高度还给画布；节点标签在节点右侧，右侧留 60px 防止边缘实体名被画布硬裁。
     series: [{
       type: 'graph', layout: 'force', roam: true, draggable: true,
       layoutAnimation: true,
+      left: 24, top: 16, right: 60, bottom: 16,
       categories: TYPES.map(t => ({ name: t, itemStyle: { color: TYPE_COLOR[t] } })),
       label: { show: true, fontSize: 11, position: 'right', color: theme.textColorBody },
       force: { repulsion: 900, edgeLength: [120, 200], gravity: 0.08 },
@@ -101,14 +103,16 @@ function renderGraph(nodes: GraphNode[], links: GraphLink[]) {
         return {
           id: n.name, name: n.name,
           category: category >= 0 ? category : 0, symbolSize: n.status === '候选' ? 22 : 30,
+          // 候选态描边用告警橙：原 textColorFaint(#9ca3af) 在白底上只有 2.5:1，
+          // 「待审核」是需要被注意的语义，弱到看不见就失去了区分作用。
           itemStyle: n.status === '候选'
-            ? { borderType: 'dashed', borderWidth: 2, borderColor: theme.textColorFaint }
+            ? { borderType: 'dashed', borderWidth: 2, borderColor: theme.graphCandidate }
             : {},
         }
       }),
       links: links.map(l => ({
         source: l.source, target: l.target, relation: l.relation,
-        lineStyle: l.status === '候选' ? { type: 'dashed', color: theme.textColorFaint } : {},
+        lineStyle: l.status === '候选' ? { type: 'dashed', color: theme.graphCandidate } : {},
       })),
       lineStyle: { color: theme.graphEdge, width: 1.6, curveness: 0.08 },
     }],
@@ -153,7 +157,20 @@ onUnmounted(() => {
 
           <div class="canvas-wrap">
             <div ref="chartRef" class="chart" />
-            <el-empty v-if="!chartReady" class="canvas-empty" description="点击左侧实体查看关系图" />
+            <!-- 空态插画换成主题色线性图标：el-empty 默认的灰紫插画与墨绿主题不是一套 -->
+            <el-empty v-if="!chartReady" class="canvas-empty" description="点击左侧实体查看关系图">
+              <template #image>
+                <el-icon :size="46" :color="theme.nodeHerb"><Share /></el-icon>
+              </template>
+            </el-empty>
+
+            <!-- 图例框：浮在图谱底部中央；非悬停时近隐形（仍留 0.12 不透明度让用户感知位置），
+                 悬停完全显形；z-index 高于图谱画布，与图谱交叉时覆盖在上层 -->
+            <div class="legend-float">
+              <span v-for="t in TYPES" :key="t">
+                <i :style="{ background: TYPE_COLOR[t] }" />{{ t }}
+              </span>
+            </div>
           </div>
 
           <aside class="detail-panel">
@@ -166,13 +183,12 @@ onUnmounted(() => {
               <div class="detail-field"><label>别名</label><span>{{ detail.alias || '—' }}</span></div>
               <div class="detail-field"><label>说明</label><span>{{ detail.desc || '—' }}</span></div>
               <div class="detail-field"><label>来源</label><span>{{ detail.source || '—' }}</span></div>
-              <div class="legend">
-                <span v-for="t in TYPES" :key="t">
-                  <i :style="{ background: TYPE_COLOR[t] }" />{{ t }}
-                </span>
-              </div>
             </template>
-            <el-empty v-else description="选择实体查看详情" :image-size="60" />
+            <el-empty v-else description="选择实体查看详情">
+              <template #image>
+                <el-icon :size="40" :color="theme.nodeHerb"><Document /></el-icon>
+              </template>
+            </el-empty>
           </aside>
         </div>
       </el-tab-pane>
@@ -191,7 +207,8 @@ onUnmounted(() => {
 .entity-list, .detail-panel { background: v-bind(theme.cardBg); border: 1px solid v-bind(theme.borderColor); border-radius: v-bind(theme.borderRadius); padding: 10px; overflow-y: auto; max-height: 620px; }
 .list-head { font-size: 13px; font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; }
 .entity-item { display: flex; align-items: center; gap: 6px; padding: 7px 8px; border-radius: 8px; cursor: pointer; font-size: 13px; }
-.entity-item:hover, .entity-item.active { background: v-bind(theme.hoverBg); }
+.entity-item:hover { background: v-bind(theme.hoverBg); }
+.entity-item.active { background: v-bind(theme.selectedBg); }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .entity-name { flex: 1; }
 .entity-type { transform: scale(0.9); }
@@ -202,6 +219,28 @@ onUnmounted(() => {
 .detail-head strong { font-weight: 600; }
 .detail-field { margin-bottom: 10px; font-size: 13px; }
 .detail-field label { display: block; color: v-bind(theme.textColorSecondary); font-size: 12px; margin-bottom: 2px; }
-.legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: v-bind(theme.textColorSecondary); margin-top: 16px; }
-.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; }
+
+/* 图谱底部悬浮图例框：始终完全显形；z-index 高于画布，与图谱交叉时覆盖在上层 */
+.legend-float {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid v-bind(theme.borderColor);
+  border-radius: 999px;
+  box-shadow: v-bind(theme.shadowCard);
+  font-size: 12px;
+  color: v-bind(theme.textColorSecondary);
+  z-index: 10;
+  pointer-events: auto;
+  max-width: 80%;
+}
+.legend-float span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.legend-float i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
 </style>

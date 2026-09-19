@@ -31,14 +31,20 @@ export const theme = {
   borderColor: '#e5e7eb',
   hoverBg: '#f0fdf4',
   autoSectionBg: '#fafbfa', // 溯源弹窗区块底
+  selectedBg: '#e6f1ea', // 常驻选中底（列表选中项）：比 hoverBg 深一档，hover 时仍有加深的余地
   // 玻璃面板（登录页）上的表单边框：#e5e7eb 压在浅绿玻璃上对比不足，需加重才看得见输入区
   fieldBorderGlass: 'rgba(45, 106, 79, 0.38)',
+  // 登录页玻璃上的卡片描边：白色描边压在近白玻璃上等于不可见，改用低透明主绿
+  glassCardBorder: 'rgba(45, 106, 79, 0.20)',
   // 登录页页面底的渐变两端（光斑由 CSS 径向渐变叠加，见 Login.vue）
   loginGradientFrom: '#e8f4ec',
   loginGradientTo: '#dcebe2',
   // 图谱连边（原先用 safetyBg 导致线几乎不可见）
   graphEdge: 'rgba(45, 106, 79, 0.42)',
   graphEdgeActive: '#2d6a4f',
+  // 候选节点/边虚线：告警橙弱透明。textColorFaint(#9ca3af) 在白底上仅 2.5:1，
+  // 「待审核」是需要被注意的语义，弱到看不见就失去了区分作用。
+  graphCandidate: 'rgba(245, 158, 11, 0.6)',
   // 图谱节点语义色
   nodeFormula: '#2d6a4f', // 方剂
   nodeHerb: '#52b788', // 中药

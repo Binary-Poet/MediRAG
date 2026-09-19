@@ -122,7 +122,6 @@ onUnmounted(() => {
 
 <template>
   <div class="overview-page">
-    <div class="page-head"><h2>运行概览</h2></div>
     <div v-loading="loading" class="grid">
       <el-card class="card wide" shadow="never">
         <div class="card-title">问答量趋势<span class="range">近14天</span></div>
@@ -149,7 +148,7 @@ onUnmounted(() => {
           </div>
           <div class="metric">
             <span>检索完成率</span>
-            <el-progress :percentage="Math.round(quality.success_rate * 100)" :color="theme.nodeHerb" />
+            <el-progress :percentage="Math.round(quality.success_rate * 100)" :color="theme.colorPrimary" />
           </div>
           <div class="metric-row">
             <el-statistic title="有用反馈" :value="quality.useful" />
@@ -165,7 +164,7 @@ onUnmounted(() => {
 
 <style scoped>
 .overview-page { background: v-bind(theme.pageBg); display: flex; flex-direction: column; gap: 14px; }
-.page-head h2 { margin: 0; font-size: 18px; font-weight: 600; color: v-bind(theme.textColorPrimary); }
+/* 页面标题由顶栏面包屑承载，页内不再重复 h2（与其他页面统一） */
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .card { background: v-bind(theme.cardBg); border-radius: v-bind(theme.borderRadius); }
 .card.wide { grid-column: span 2; }

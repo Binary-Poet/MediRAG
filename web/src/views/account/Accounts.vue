@@ -12,6 +12,14 @@ import { theme } from '../../styles/theme'
 // 与后端 app/models/user.py 的 ROLES 一致
 const ROLE_OPTIONS = ['管理员', '中医药从业者', '知识用户']
 
+// 角色徽章按权限分级：三档角色原先同一个绿色，扫一眼分不出权限高低（与主布局侧栏同口径）
+const ROLE_TAG: Record<string, 'warning' | 'primary' | 'info'> = {
+  管理员: 'warning', 中医药从业者: 'primary', 知识用户: 'info',
+}
+function roleTag(role: string): 'warning' | 'primary' | 'info' {
+  return ROLE_TAG[role] ?? 'info'
+}
+
 const auth = useAuthStore()
 const users = ref<UserInfo[]>([])
 const loading = ref(false)
@@ -115,8 +123,7 @@ async function removeUser(row: UserInfo) {
 
 <template>
   <div class="accounts-page">
-    <div class="page-head">
-      <h2>账户管理</h2>
+    <div class="toolbar">
       <el-button type="primary" @click="openDialog">
         <el-icon><Plus /></el-icon>&nbsp;新建用户
       </el-button>
@@ -128,7 +135,7 @@ async function removeUser(row: UserInfo) {
         <el-table-column prop="display_name" label="姓名" min-width="160" />
         <el-table-column label="角色" width="150">
           <template #default="{ row }: { row: UserInfo }">
-            <el-tag size="small" type="success" effect="plain">{{ row.role }}</el-tag>
+            <el-tag size="small" :type="roleTag(row.role)" effect="plain">{{ row.role }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="170" fixed="right">
@@ -185,7 +192,7 @@ async function removeUser(row: UserInfo) {
 
 <style scoped>
 .accounts-page { display: flex; flex-direction: column; gap: 14px; }
-.page-head { display: flex; align-items: center; justify-content: space-between; }
-.page-head h2 { margin: 0; font-size: 18px; font-weight: 600; color: v-bind(theme.textColorPrimary); }
+/* 页面标题由顶栏面包屑承载；主操作右对齐（与典籍知识库「上传文献」同一位置惯例） */
+.toolbar { display: flex; justify-content: flex-end; }
 .reset-hint { margin: 0 0 12px; font-size: 13.5px; line-height: 1.7; color: v-bind(theme.textColorSecondary); }
 </style>

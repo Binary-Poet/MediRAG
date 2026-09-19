@@ -70,8 +70,6 @@ function restoreAll() {
 
 <template>
   <div class="inference-page">
-    <div class="page-head"><h2>推理配置</h2></div>
-
     <el-card class="card" shadow="never">
       <div class="card-title">混合检索组</div>
       <div class="rows">
@@ -150,7 +148,6 @@ function restoreAll() {
 
 <style scoped>
 .inference-page { background: v-bind(theme.pageBg); display: flex; flex-direction: column; gap: 14px; }
-.page-head h2 { margin: 0; font-size: 18px; font-weight: 600; color: v-bind(theme.textColorPrimary); }
 .card { background: v-bind(theme.cardBg); border-radius: v-bind(theme.borderRadius); }
 .card-title { font-size: 14px; font-weight: 600; color: v-bind(theme.textColorPrimary); margin-bottom: 12px; }
 .rows { display: flex; flex-direction: column; gap: 14px; }

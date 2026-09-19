@@ -67,3 +67,11 @@ textarea,
 optgroup {
   font-family: inherit;
 }
+
+/* 键盘可达性：自定义 button（建议问题卡、会话操作、演示账号卡等）没有自带焦点样式，
+   浏览器默认焦点环是深蓝/黑，与墨绿主题跳色；统一为主色描边。
+   表单控件（input 等）不在此列，Element Plus 已有自身的焦点反馈。 */
+button:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
+}

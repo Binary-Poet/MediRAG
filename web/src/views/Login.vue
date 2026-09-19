@@ -257,11 +257,13 @@ const forgotVisible = ref(false)
   font-family: v-bind(theme.fontDisplay);
   min-height: 100%;
   display: flex;
-  align-items: center;
   justify-content: center;
   padding: 32px 24px;
   box-sizing: border-box;
-  overflow: hidden;
+  /* 矮视口（768p 笔记本等）下卡片会超出可视高度：允许纵向滚动，且不能整页 hidden——
+     否则底部版权/演示账号被裁掉且永远滚不到。光斑是绝对定位的装饰，横向仍裁切。 */
+  overflow-x: hidden;
+  overflow-y: auto;
   /* 渐变底 + 光斑：为毛玻璃提供可模糊的层次（彩斑加浓，透出卡片更明显） */
   background:
     radial-gradient(900px 520px at 12% 18%, rgba(82, 183, 136, 0.5), transparent 60%),
@@ -362,7 +364,10 @@ const forgotVisible = ref(false)
   position: relative;
   z-index: 1;
   width: min(1000px, 100%);
-  min-height: 660px;
+  /* 矮视口下让出滚动空间；flex 居中改用 margin auto——align-items: center 在内容超高时
+     会把顶部裁掉且无法滚回顶部（经典 flexbox 溢出问题），margin auto 不会。 */
+  min-height: min(660px, calc(100vh - 64px));
+  margin: auto 0;
   display: grid;
   grid-template-columns: 1.45fr 1fr;
   border-radius: 24px;
@@ -558,7 +563,8 @@ const forgotVisible = ref(false)
 .form-tag {
   font-size: 12px;
   letter-spacing: 2px;
-  color: v-bind(theme.textColorMuted);
+  /* secondary(#4b5563) 对玻璃底约 6:1；muted(#6b7280) 只有约 3.9:1，低于 AA 的小字下限 */
+  color: v-bind(theme.textColorSecondary);
 }
 
 .form-panel h2 {
@@ -599,7 +605,8 @@ const forgotVisible = ref(false)
   display: block;
   margin-bottom: 8px;
   font-size: 13px;
-  color: v-bind(theme.textColorMuted);
+  /* 标签是必读信息而非装饰：muted 压玻璃只有约 3.9:1，加深到 secondary */
+  color: v-bind(theme.textColorSecondary);
 }
 
 .field-error {
@@ -675,6 +682,8 @@ const forgotVisible = ref(false)
   height: 46px;
   font-size: 15px;
   letter-spacing: 4px;
+  /* letter-spacing 会在末字后多出一份间距，居中文字整体左偏；等值缩进抵消 */
+  text-indent: 4px;
   border-radius: 8px;
 }
 
@@ -712,7 +721,10 @@ const forgotVisible = ref(false)
 .demo-head span {
   font-size: 12px;
   letter-spacing: 1.2px;
-  color: v-bind(theme.textColorMuted);
+  /* 分组标签是找入口的钥匙，不是装饰：加深 + 加粗，muted 在玻璃上只有约 3.9:1 */
+  font-weight: 600;
+  color: v-bind(theme.textColorSecondary);
+  text-indent: 1.2px;
 }
 
 .demo-card {
@@ -721,9 +733,10 @@ const forgotVisible = ref(false)
   gap: 12px;
   padding: 10px 14px;
   margin-bottom: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  /* 白描边压在近白玻璃上等于不可见，卡片像一排漂浮的文字；改低透明主绿描边 */
+  border: 1px solid v-bind(theme.glassCardBorder);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.55);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
@@ -778,6 +791,34 @@ const forgotVisible = ref(false)
 
   .form-panel {
     padding: 36px 32px;
+  }
+}
+
+/* 矮视口（笔记本小窗等）：压缩卡片内边距与区块间距，优先保证完整可见而非留白舒展 */
+@media (max-height: 760px) {
+  .login-card {
+    min-height: 0;
+  }
+
+  .brand-panel,
+  .form-panel {
+    padding: 30px 36px;
+  }
+
+  .brand-tag {
+    margin-top: 16px;
+  }
+
+  .form-panel h2 {
+    margin: 8px 0 10px;
+  }
+
+  .title-bar {
+    margin-bottom: 16px;
+  }
+
+  .demo-area {
+    margin-top: 18px;
   }
 }
 </style>
