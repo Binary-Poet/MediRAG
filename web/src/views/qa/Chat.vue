@@ -522,13 +522,22 @@ function onEnter(e: KeyboardEvent) {
 }
 
 .a {
+  /* 卡片内「思考过程 → 回答正文 → 注意事项」等相邻区块共用的纵向间距。
+     正文原先上边距为 0、下边距 12px，视觉上像被思考块粘住，故两侧取同一值。 */
+  --qa-block-gap: 12px;
   background: v-bind(theme.autoSectionBg);
   border-color: v-bind(theme.borderColor);
 }
 
 .answer-text {
+  margin-top: var(--qa-block-gap);
   white-space: pre-wrap;
   line-height: 1.8;
+}
+
+/* 没有思考块时正文就是卡片首个子元素，不该再撑开上间距（否则上 32px、下 20px 不对称） */
+.answer-text:first-child {
+  margin-top: 0;
 }
 
 .thinking {
@@ -608,7 +617,7 @@ function onEnter(e: KeyboardEvent) {
    原先满饱和的 #dcfce7 满宽色块是整页最重的色块，把回答正文挤成了次要元素；
    这段提示命中图谱事实就会出现、频率极高，弱化后才不抢正文。 */
 .safety-box {
-  margin-top: 12px;
+  margin-top: var(--qa-block-gap);
   background: v-bind(theme.safetyBgSoft);
   color: v-bind(theme.safetyText);
   border-left: 3px solid v-bind(theme.colorSuccess);
